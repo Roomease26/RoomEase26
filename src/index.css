@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  
+  --color-primary: #5469D4;
+  --color-primary-dark: #1A1F36;
+  --color-bg-light: #F7F9FC;
+  --color-gray-text: #697386;
+  --color-border-sleek: #E3E8EE;
+  --color-accent-sleek: #33CC66;
+  
+  --shadow-sleek: 0 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-mobile: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+@layer base {
+  body {
+    @apply font-sans bg-[#E5E9F0] text-[#1A1F36] antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .sleek-card {
+    @apply bg-white rounded-2xl shadow-[var(--shadow-sleek)] border border-[var(--color-border-sleek)];
+  }
+  
+  .sleek-input {
+    @apply bg-white border border-[var(--color-border-sleek)] px-4 py-3 rounded-lg text-sm focus:outline-none focus:border-[var(--color-primary)] transition-all;
+  }
+  
+  .sleek-btn-primary {
+    @apply bg-[var(--color-primary)] text-white px-4 py-3 rounded-lg font-semibold text-sm hover:opacity-90 transition-all active:scale-[0.98];
+  }
+  
+  .sleek-btn-dark {
+    @apply bg-[var(--color-primary-dark)] text-white px-4 py-3 rounded-lg font-semibold text-sm hover:opacity-90 transition-all active:scale-[0.98];
+  }
+  
+  .sleek-btn-accent {
+    @apply bg-[var(--color-accent-sleek)] text-white px-4 py-3 rounded-lg font-bold text-sm shadow-[0_4px_10px_rgba(51,204,102,0.3)] hover:opacity-90 transition-all active:scale-[0.98];
+  }
+  
+  .sleek-tag {
+    @apply text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 uppercase tracking-wider font-bold;
+  }
+}
+

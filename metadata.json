@@ -1,0 +1,8 @@
+{
+  "name": "RoomEase",
+  "description": "A mobile-first room rental discovery app with verified listings, secure owner connections, and real-time chat.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}

@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and subscription status",
+      "type": "object",
+      "properties": {
+        "phone": { "type": "string" },
+        "loginExpiry": { "type": "string", "format": "date-time" },
+        "paymentExpiry": { "type": "string", "format": "date-time" },
+        "role": { "type": "string", "enum": ["user", "admin"] }
+      },
+      "required": ["phone", "role"]
+    },
+    "Listing": {
+      "title": "Listing",
+      "description": "Room rental listing details",
+      "type": "object",
+      "properties": {
+        "city": { "type": "string" },
+        "area": { "type": "string" },
+        "address": { "type": "string" },
+        "landmark": { "type": "string" },
+        "photos": { "type": "array", "items": { "type": "string" } },
+        "availability": {
+          "type": "object",
+          "properties": {
+            "days": { "type": "string" },
+            "slots": { "type": "string" },
+            "status": { "type": "string", "enum": ["Available Now", "Not Available"] }
+          }
+        },
+        "ownerUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["city", "area", "address", "ownerUid"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "Chat session between user and owner",
+      "type": "object",
+      "properties": {
+        "listingId": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["listingId", "participants"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Individual chat message",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["text", "senderUid", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/listings/{listingId}": {
+      "schema": "Listing",
+      "description": "Room listings"
+    },
+    "/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Chat sessions"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a chat"
+    }
+  }
+}
