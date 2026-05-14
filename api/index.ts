@@ -1,8 +1,10 @@
 import express from 'express';
-import apiRoutes from '../src/server/routes.js';
+import apiRoutes from '../src/server/routes';
 
 const app = express();
 app.use(express.json());
+
+console.log('[Vercel API] Handler initialized');
 
 // API routes are already prefixed with /api in the server,
 // but Vercel api/index.ts handles /api already.

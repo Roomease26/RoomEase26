@@ -2,7 +2,7 @@ import { Router } from 'express';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import axios from 'axios';
-import { otpStore } from './otpStore.ts';
+import { otpStore } from './otpStore';
 
 const router = Router();
 

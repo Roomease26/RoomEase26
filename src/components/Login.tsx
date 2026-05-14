@@ -79,8 +79,18 @@ export default function Login({ onLogin, language }: Props) {
       navigate(`/verify?phone=${phone}`);
     } catch (err: any) {
       console.error('[Login] Send OTP Error:', err);
-      const msg = err.response?.data?.error || 'Failed to send OTP. Please try again later.';
-      setError(msg);
+      const errorData = err.response?.data;
+      let msg = 'Failed to send OTP. Please try again later.';
+      
+      if (errorData) {
+        if (typeof errorData === 'string') msg = errorData;
+        else if (errorData.error && typeof errorData.error === 'string') msg = errorData.error;
+        else if (errorData.message && typeof errorData.message === 'string') msg = errorData.message;
+      } else if (err.message) {
+        msg = err.message;
+      }
+      
+      setError(String(msg));
     } finally {
       setLoading(false);
     }
@@ -101,7 +111,18 @@ export default function Login({ onLogin, language }: Props) {
       navigate('/dashboard');
     } catch (err: any) {
       console.error('[Login] Verify OTP Error:', err);
-      setError(err.response?.data?.error || 'Invalid OTP. Please try again.');
+      const errorData = err.response?.data;
+      let msg = 'Invalid OTP. Please try again.';
+      
+      if (errorData) {
+        if (typeof errorData === 'string') msg = errorData;
+        else if (errorData.error && typeof errorData.error === 'string') msg = errorData.error;
+        else if (errorData.message && typeof errorData.message === 'string') msg = errorData.message;
+      } else if (err.message) {
+        msg = err.message;
+      }
+      
+      setError(String(msg));
     } finally {
       setLoading(false);
     }
