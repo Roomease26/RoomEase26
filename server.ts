@@ -1,8 +1,9 @@
 import express from 'express';
 import path from 'path';
-import apiRoutes from './src/server/routes';
+import apiRoutes from './src/server/routes.ts';
 
 async function startServer() {
+  console.log('[Server] Initializing...');
   const app = express();
   const PORT = 3000;
 

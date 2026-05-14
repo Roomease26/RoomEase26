@@ -2,58 +2,83 @@ import { Router } from 'express';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import axios from 'axios';
-import { otpStore } from './otpStore';
+import { otpStore } from './otpStore.ts';
 
 const router = Router();
 
 // OTP Send
 router.post('/otp/send', async (req, res) => {
   const { phone } = req.body;
-  if (!phone) return res.status(400).json({ error: 'Phone number is required' });
-
-  const now = Date.now();
-  const existing = otpStore.get(phone);
-  
-  if (existing && (now - existing.lastSent) < 60000) {
-    const remaining = Math.ceil((60000 - (now - existing.lastSent)) / 1000);
-    return res.status(429).json({ error: `Please wait ${remaining} seconds before requesting another OTP` });
+  if (!phone) {
+    console.error('[OTP] Missing phone number in request body');
+    return res.status(400).json({ error: 'Phone number is required' });
   }
 
-  const otp = Math.floor(1000 + Math.random() * 9000).toString();
-  otpStore.set(phone, { otp, lastSent: now });
+  // Ensure 10-digit format
+  const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+  if (cleanPhone.length !== 10) {
+    console.error('[OTP] Invalid phone number format:', phone);
+    return res.status(400).json({ error: 'Invalid 10-digit phone number' });
+  }
 
-  console.log(`Generated OTP for ${phone}: ${otp}`);
+  const fullPhone = `+91${cleanPhone}`;
+  const now = Date.now();
+  const existing = otpStore.get(cleanPhone);
+  
+  if (existing && (now - existing.lastSent) < 30000) { // Reduced cooldown to 30s for better UX during debug
+    const remaining = Math.ceil((30000 - (now - existing.lastSent)) / 1000);
+    return res.status(429).json({ error: `Please wait ${remaining} seconds` });
+  }
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit OTP as requested
+  otpStore.set(cleanPhone, { otp, lastSent: now });
+
+  console.log(`[OTP] Generated OTP for ${cleanPhone}: ${otp}`);
 
   const apiKey = process.env.BULK_BLASTER_API_KEY || 'v3133PCKUDCn8lSJJWg5iqrJGZiYpRNT';
 
-  console.log(`[OTP] Sending OTP to ${phone}. DialCode: 91, OTP: ${otp}`);
+  console.log(`[OTP] Attempting to send SMS to ${fullPhone} via Bulk Blaster`);
 
   try {
+    // Bulk Blaster usually expects a specific format.
+    // Based on user request: POST, +91 format, dialCode: 91
     const response = await axios.post('https://bulkblaster-global-otp-290441563653.asia-south1.run.app/send-otp', {
       apiKey,
-      phone,
+      phone: fullPhone, // User requested +91 format
       dialCode: '91',
       otp
     }, {
-      timeout: 10000 // 10s timeout
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      timeout: 15000 // 15s timeout
     });
     
     console.log('[OTP] Bulk Blaster API Success:', response.data);
     res.json({ success: true, message: 'OTP sent successfully' });
   } catch (error: any) {
-    console.error('[OTP] Bulk Blaster API Error:', {
+    const errorData = error.response?.data;
+    const errorStatus = error.response?.status;
+    
+    console.error('[OTP] Bulk Blaster API Failure:', {
       message: error.message,
-      data: error.response?.data,
-      status: error.response?.status
+      data: errorData,
+      status: errorStatus,
+      url: 'https://bulkblaster-global-otp-290441563653.asia-south1.run.app/send-otp'
     });
     
-    // In production, we'd report an error, but for the user's specific request
-    // we return success with a testMode flag to allow 123456 fallback check
+    // Check if it's a known service error or a config error
+    let userMsg = 'SMS Service currently unavailable.';
+    if (errorStatus === 401 || errorStatus === 403) userMsg = 'Invalid API Configuration (API Key).';
+    if (error.code === 'ECONNABORTED') userMsg = 'SMS service timed out. Please try again.';
+
+    // Fallback to test mode if API fails, allowing 123456
     res.json({ 
       success: true, 
-      message: 'OTP triggered (Check server logs if not received)', 
+      message: `${userMsg} (Test Mode Enabled: Use 123456)`, 
       testMode: true,
-      debug: process.env.NODE_ENV !== 'production' ? error.response?.data : undefined
+      debug: process.env.NODE_ENV !== 'production' ? { error: error.message, details: errorData } : undefined
     });
   }
 });
@@ -61,14 +86,21 @@ router.post('/otp/send', async (req, res) => {
 // OTP Verify
 router.post('/otp/verify', (req, res) => {
   const { phone, otp } = req.body;
-  const stored = otpStore.get(phone);
+  if (!phone || !otp) return res.status(400).json({ error: 'Phone and OTP are required' });
+
+  const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+  const stored = otpStore.get(cleanPhone);
+
+  console.log(`[OTP] Verifying OTP for ${cleanPhone}. Provided: ${otp}, Stored: ${stored?.otp}`);
 
   if (otp === '123456' || (stored && otp === stored.otp)) {
-    otpStore.delete(phone);
+    console.log(`[OTP] Verification successful for ${cleanPhone}`);
+    otpStore.delete(cleanPhone);
     return res.json({ success: true, message: 'OTP verified' });
   }
 
-  res.status(400).json({ error: 'Invalid OTP' });
+  console.warn(`[OTP] Verification failed for ${cleanPhone}`);
+  res.status(400).json({ error: 'Invalid OTP. Please check and try again.' });
 });
 
 // Razorpay Order

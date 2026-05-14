@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Phone, ShieldCheck, ArrowRight, Loader2 } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { Language } from '../types';
 import { translations } from '../translations';
@@ -12,12 +12,16 @@ interface Props {
   forcedStep?: 'phone' | 'otp';
 }
 
-export default function Login({ onLogin, language, forcedStep }: Props) {
+export default function Login({ onLogin, language }: Props) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
+  
+  // Determine step from URL
+  const isVerifyPage = location.pathname === '/verify';
+  
   const [phone, setPhone] = useState(searchParams.get('phone') || '');
   const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'phone' | 'otp'>(forcedStep || 'phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
@@ -26,22 +30,15 @@ export default function Login({ onLogin, language, forcedStep }: Props) {
   const t = translations[language];
 
   useEffect(() => {
-    console.log(`[Login] Component mounted. Step: ${step}, Phone: ${phone}`);
-  }, []);
+    const urlPhone = searchParams.get('phone');
+    if (urlPhone) setPhone(urlPhone);
+  }, [searchParams]);
 
   useEffect(() => {
-    if (forcedStep) {
-      console.log(`[Login] Forced step change: ${forcedStep}`);
-      setStep(forcedStep);
-    }
-  }, [forcedStep]);
-
-  useEffect(() => {
-    if (step === 'otp' && !phone) {
-      console.warn('[Login] Missing phone number in OTP step, redirecting to phone input');
+    if (isVerifyPage && !phone && !searchParams.get('phone')) {
       navigate('/login');
     }
-  }, [step, phone, navigate]);
+  }, [isVerifyPage, phone, navigate, searchParams]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -64,15 +61,26 @@ export default function Login({ onLogin, language, forcedStep }: Props) {
     try {
       console.log(`[Login] Requesting OTP for ${phone}`);
       const res = await axios.post('/api/otp/send', { phone });
-      setCooldown(60);
+      
+      console.log('[Login] API Response:', res.data);
+      
+      setCooldown(30); // 30s cooldown
+      
       if (res.data.testMode) {
+        console.log('[Login] Test mode enabled via API response');
         setIsTestMode(true);
       }
+      
+      if (res.data.message && res.data.testMode) {
+        setError(res.data.message); // Show the service warning/test mode message
+      }
+
       console.log('[Login] OTP send success, navigating to verify');
       navigate(`/verify?phone=${phone}`);
     } catch (err: any) {
       console.error('[Login] Send OTP Error:', err);
-      setError(err.response?.data?.error || 'Failed to send OTP. Please try again.');
+      const msg = err.response?.data?.error || 'Failed to send OTP. Please try again later.';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -104,7 +112,7 @@ export default function Login({ onLogin, language, forcedStep }: Props) {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        key={step} // Force re-render on step change to avoid blank screen issues
+        key={isVerifyPage ? 'verify' : 'login'} // Force re-render on step change to avoid blank screen issues
         className="w-full max-w-[400px] bg-[#F7F9FC] rounded-[40px] border-[8px] border-[#1A1F36] shadow-mobile overflow-hidden flex flex-col min-h-[500px]"
       >
         <div className="p-8 flex flex-col flex-1">
@@ -113,10 +121,10 @@ export default function Login({ onLogin, language, forcedStep }: Props) {
           </div>
 
           <h2 className="text-xl font-bold text-[#1A1F36] mb-2">
-            {step === 'phone' ? t.login_phone : t.verify_otp}
+            {!isVerifyPage ? t.login_phone : t.verify_otp}
           </h2>
           <p className="text-[13px] text-[#697386] mb-8">
-            {step === 'phone' 
+            {!isVerifyPage 
               ? (language === 'en' ? 'We will send you a one-time password' : language === 'hi' ? 'हम आपको एक वन-टाइम पासवर्ड भेजेंगे' : 'आम्ही तुम्हाला वन-टाइम पासवर्ड पाठवू')
               : (language === 'en' ? `Enter the code sent to ${phone}` : language === 'hi' ? `${phone} पर भेजा गया कोड दर्ज करें` : `${phone} वर पाठवलेला कोड प्रविष्ट करा`)}
           </p>
@@ -127,14 +135,14 @@ export default function Login({ onLogin, language, forcedStep }: Props) {
             </div>
           )}
 
-          {isTestMode && step === 'otp' && (
+          {isTestMode && isVerifyPage && (
             <div className="mb-6 p-3 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium border border-blue-100">
               {language === 'en' ? 'Use 123456 as OTP if not received' : 'यदि OTP प्राप्त नहीं हुआ है तो 123456 का उपयोग करें'}
             </div>
           )}
 
           <div className="space-y-4">
-            {step === 'phone' ? (
+            {!isVerifyPage ? (
               <>
                 <div className="flex flex-col gap-1">
                   <label className="text-[12px] font-semibold text-[#1A1F36]">{t.phone_placeholder}</label>

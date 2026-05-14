@@ -327,7 +327,7 @@ export default function App() {
                       {t.welcome}
                     </p>
                   </div>
-                  <Login onLogin={handleLogin} language={language || 'en'} forcedStep="phone" />
+                  <Login onLogin={handleLogin} language={language || 'en'} />
                 </div>
               )
             } 
@@ -344,7 +344,7 @@ export default function App() {
                       {t.welcome}
                     </p>
                   </div>
-                  <Login onLogin={handleLogin} language={language || 'en'} forcedStep="otp" />
+                  <Login onLogin={handleLogin} language={language || 'en'} />
                 </div>
               )
             } 
