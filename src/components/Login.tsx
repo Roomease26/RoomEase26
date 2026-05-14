@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Phone, ShieldCheck, ArrowRight, Loader2 } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { Language } from '../types';
 import { translations } from '../translations';
@@ -8,18 +9,39 @@ import { translations } from '../translations';
 interface Props {
   onLogin: (phone: string) => void;
   language: Language;
+  forcedStep?: 'phone' | 'otp';
 }
 
-export default function Login({ onLogin, language }: Props) {
-  const [phone, setPhone] = useState('');
+export default function Login({ onLogin, language, forcedStep }: Props) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const [phone, setPhone] = useState(searchParams.get('phone') || '');
   const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
+  const [step, setStep] = useState<'phone' | 'otp'>(forcedStep || 'phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const [isTestMode, setIsTestMode] = useState(false);
 
   const t = translations[language];
+
+  useEffect(() => {
+    console.log(`[Login] Component mounted. Step: ${step}, Phone: ${phone}`);
+  }, []);
+
+  useEffect(() => {
+    if (forcedStep) {
+      console.log(`[Login] Forced step change: ${forcedStep}`);
+      setStep(forcedStep);
+    }
+  }, [forcedStep]);
+
+  useEffect(() => {
+    if (step === 'otp' && !phone) {
+      console.warn('[Login] Missing phone number in OTP step, redirecting to phone input');
+      navigate('/login');
+    }
+  }, [step, phone, navigate]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -40,15 +62,16 @@ export default function Login({ onLogin, language }: Props) {
     setError('');
     setIsTestMode(false);
     try {
-      console.log(`[Frontend] Requesting OTP for ${phone}`);
+      console.log(`[Login] Requesting OTP for ${phone}`);
       const res = await axios.post('/api/otp/send', { phone });
-      setStep('otp');
       setCooldown(60);
       if (res.data.testMode) {
         setIsTestMode(true);
       }
+      console.log('[Login] OTP send success, navigating to verify');
+      navigate(`/verify?phone=${phone}`);
     } catch (err: any) {
-      console.error('[Frontend] Send OTP Error:', err);
+      console.error('[Login] Send OTP Error:', err);
       setError(err.response?.data?.error || 'Failed to send OTP. Please try again.');
     } finally {
       setLoading(false);
@@ -63,11 +86,13 @@ export default function Login({ onLogin, language }: Props) {
     setLoading(true);
     setError('');
     try {
-      console.log(`[Frontend] Verifying OTP for ${phone}`);
+      console.log(`[Login] Verifying OTP for ${phone}`);
       await axios.post('/api/otp/verify', { phone, otp });
+      console.log('[Login] OTP verified successfully');
       onLogin(phone);
+      navigate('/dashboard');
     } catch (err: any) {
-      console.error('[Frontend] Verify OTP Error:', err);
+      console.error('[Login] Verify OTP Error:', err);
       setError(err.response?.data?.error || 'Invalid OTP. Please try again.');
     } finally {
       setLoading(false);
@@ -75,11 +100,12 @@ export default function Login({ onLogin, language }: Props) {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-[#E5E9F0]">
+    <div className="flex flex-col items-center justify-center p-6 bg-[#E5E9F0]">
       <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="w-full max-sm bg-[#F7F9FC] rounded-[40px] border-[8px] border-[#1A1F36] shadow-mobile overflow-hidden flex flex-col min-h-[640px]"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        key={step} // Force re-render on step change to avoid blank screen issues
+        className="w-full max-w-[400px] bg-[#F7F9FC] rounded-[40px] border-[8px] border-[#1A1F36] shadow-mobile overflow-hidden flex flex-col min-h-[500px]"
       >
         <div className="p-8 flex flex-col flex-1">
           <div className="text-2xl font-extrabold text-[#5469D4] mb-8 flex items-center gap-2">
@@ -146,6 +172,7 @@ export default function Login({ onLogin, language }: Props) {
                   <label className="text-[12px] font-semibold text-[#1A1F36]">{t.otp_placeholder}</label>
                   <input
                     type="text"
+                    autoFocus
                     placeholder={t.otp_placeholder}
                     value={otp}
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -175,7 +202,7 @@ export default function Login({ onLogin, language }: Props) {
                     {cooldown > 0 ? `${t.resend} OTP in ${cooldown}s` : `${t.resend} OTP`}
                   </button>
                   <button
-                    onClick={() => setStep('phone')}
+                    onClick={() => navigate('/login')}
                     className="text-[#697386] font-medium text-xs"
                   >
                     {t.change_phone}

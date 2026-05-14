@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Language, UserProfile, Listing, City, Chat, Message, INITIAL_AREAS, PRICING } from './types';
+import { Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import LanguageSelector from './components/LanguageSelector';
 import Login from './components/Login';
 import TermsAndConditions from './components/TermsAndConditions';
@@ -23,7 +24,12 @@ import { Search } from 'lucide-react';
 import { translations } from './translations';
 
 export default function App() {
-  const [language, setLanguage] = useState<Language | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [language, setLanguage] = useState<Language | null>(() => {
+    const saved = localStorage.getItem('roomease_lang');
+    return (saved as Language) || null;
+  });
   const [user, setUser] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState('home');
   const [selectedLocation, setSelectedLocation] = useState<{ city: City; area: string } | null>(null);
@@ -32,10 +38,27 @@ export default function App() {
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [areas, setAreas] = useState<Record<City, string[]>>(INITIAL_AREAS);
 
-  // Use translations for welcome messages
+  // Sync language selection to localStorage
+  useEffect(() => {
+    if (language) {
+      localStorage.setItem('roomease_lang', language);
+    }
+  }, [language]);
+
+  // Handle high-level redirects
+  useEffect(() => {
+    console.log('[App] Route changed:', location.pathname);
+    if (!language && location.pathname !== '/') {
+      navigate('/');
+    } else if (language && !user && !['/login', '/verify', '/'].includes(location.pathname)) {
+      navigate('/login');
+    }
+  }, [language, user, location.pathname, navigate]);
+
+  // Use translations
   const t = language ? translations[language] : translations.en;
 
-  // Mock Data
+  // Mock Data (Listings state)
   const [listings, setListings] = useState<Listing[]>([
     {
       id: 'list_1',
@@ -168,28 +191,6 @@ export default function App() {
 
   const isPaid = user?.paymentExpiry ? new Date(user.paymentExpiry) > new Date() : false;
 
-  if (!language) {
-    return <LanguageSelector onSelect={setLanguage} />;
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-[#E5E9F0]">
-        <div className="p-6 bg-[#5469D4] text-white text-center py-12 rounded-b-[40px] shadow-lg">
-          <h1 className="text-3xl font-extrabold mb-4">RoomEase</h1>
-          <p className="text-blue-100 text-sm max-w-xs mx-auto">
-            {t.welcome}
-          </p>
-        </div>
-        <Login onLogin={handleLogin} language={language} />
-      </div>
-    );
-  }
-
-  if (!user.acceptedTerms) {
-    return <TermsAndConditions onAccept={handleAcceptTerms} language={language} />;
-  }
-
   const renderContent = () => {
     switch (activeTab) {
       case 'home':
@@ -209,7 +210,7 @@ export default function App() {
               </div>
               <CitySelector 
                 areas={areas}
-                language={language}
+                language={language || 'en'}
                 onSelect={(city, area) => setSelectedLocation({ city, area })} 
               />
             </div>
@@ -222,14 +223,14 @@ export default function App() {
             user={user}
             city={selectedLocation.city}
             area={selectedLocation.area}
-            language={language}
+            language={language || 'en'}
             onUnlock={() => {
               setPaymentCity(selectedLocation.city);
               setIsPaymentModalOpen(true);
             }}
             onChat={(listing) => {
               if (isCityPaid(listing.city)) {
-                setActiveChat({ id: 'chat_1', listingId: listing.id, participants: [user.uid, listing.ownerUid], updatedAt: new Date().toISOString() });
+                setActiveChat({ id: 'chat_1', listingId: listing.id, participants: [user!.uid, listing.ownerUid], updatedAt: new Date().toISOString() });
               } else {
                 setPaymentCity(listing.city as City);
                 setIsPaymentModalOpen(true);
@@ -242,16 +243,16 @@ export default function App() {
         return (
           <SearchTab 
             listings={listings}
-            user={user}
+            user={user!}
             isCityPaid={isCityPaid}
-            language={language}
+            language={language || 'en'}
             onUnlock={(city) => {
               setPaymentCity(city as City);
               setIsPaymentModalOpen(true);
             }}
             onChat={(listing) => {
               if (isCityPaid(listing.city)) {
-                setActiveChat({ id: 'chat_1', listingId: listing.id, participants: [user.uid, listing.ownerUid], updatedAt: new Date().toISOString() });
+                setActiveChat({ id: 'chat_1', listingId: listing.id, participants: [user!.uid, listing.ownerUid], updatedAt: new Date().toISOString() });
               } else {
                 setPaymentCity(listing.city as City);
                 setIsPaymentModalOpen(true);
@@ -260,7 +261,7 @@ export default function App() {
           />
         );
       case 'add':
-        return <OwnerDashboard areas={areas} language={language} onAddListing={handleAddListing} />;
+        return <OwnerDashboard areas={areas} language={language || 'en'} onAddListing={handleAddListing} />;
       case 'chats':
         return (
           <div className="p-6">
@@ -284,14 +285,14 @@ export default function App() {
       case 'profile':
         return (
           <div className="space-y-6">
-            <Profile user={user} language={language} onLogout={handleLogout} />
+            <Profile user={user!} language={language || 'en'} onLogout={handleLogout} />
             <div className="px-6 pb-24">
               <ImageGenerator />
             </div>
           </div>
         );
       case 'admin':
-        if (user.role !== 'admin') return null;
+        if (user?.role !== 'admin') return null;
         return (
           <AdminPanel
             users={[user]}
@@ -309,35 +310,94 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#F7F9FC]">
-        {renderContent()}
-        
-        <Navigation 
-          activeTab={activeTab} 
-          onTabChange={setActiveTab} 
-          role={user.role} 
-          language={language}
-        />
-
-        <PaymentModal
-          isOpen={isPaymentModalOpen}
-          onClose={() => {
-            setIsPaymentModalOpen(false);
-            setPaymentCity(null);
-          }}
-          onSuccess={handlePaymentSuccess}
-          userPhone={user.phone}
-          language={language}
-          city={paymentCity || ''}
-        />
-
-        {activeChat && (
-          <ChatComponent
-            chatId={activeChat.id}
-            currentUserId={user.uid}
-            messages={messages}
-            onSendMessage={(text) => setMessages([...messages, { id: 'msg_' + Date.now(), text, senderUid: user.uid, createdAt: new Date().toISOString() }])}
-            onBack={() => setActiveChat(null)}
+        <Routes>
+          <Route 
+            path="/" 
+            element={!language ? <LanguageSelector onSelect={setLanguage} /> : <Navigate to="/login" />} 
           />
+          
+          <Route 
+            path="/login" 
+            element={
+              user ? <Navigate to="/dashboard" /> : (
+                <div className="min-h-screen bg-[#E5E9F0]">
+                  <div className="p-6 bg-[#5469D4] text-white text-center py-12 rounded-b-[40px] shadow-lg">
+                    <h1 className="text-3xl font-extrabold mb-4">RoomEase</h1>
+                    <p className="text-blue-100 text-sm max-w-xs mx-auto">
+                      {t.welcome}
+                    </p>
+                  </div>
+                  <Login onLogin={handleLogin} language={language || 'en'} forcedStep="phone" />
+                </div>
+              )
+            } 
+          />
+
+          <Route 
+            path="/verify" 
+            element={
+              user ? <Navigate to="/dashboard" /> : (
+                <div className="min-h-screen bg-[#E5E9F0]">
+                  <div className="p-6 bg-[#5469D4] text-white text-center py-12 rounded-b-[40px] shadow-lg">
+                    <h1 className="text-3xl font-extrabold mb-4">RoomEase</h1>
+                    <p className="text-blue-100 text-sm max-w-xs mx-auto">
+                      {t.welcome}
+                    </p>
+                  </div>
+                  <Login onLogin={handleLogin} language={language || 'en'} forcedStep="otp" />
+                </div>
+              )
+            } 
+          />
+
+          <Route 
+            path="/dashboard" 
+            element={
+              !user ? <Navigate to="/login" /> : (
+                !user.acceptedTerms ? (
+                  <TermsAndConditions onAccept={handleAcceptTerms} language={language || 'en'} />
+                ) : (
+                  <>
+                    {renderContent()}
+                    <Navigation 
+                      activeTab={activeTab} 
+                      onTabChange={setActiveTab} 
+                      role={user.role} 
+                      language={language || 'en'}
+                    />
+                  </>
+                )
+              )
+            } 
+          />
+
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+
+        {user && user.acceptedTerms && (
+          <>
+            <PaymentModal
+              isOpen={isPaymentModalOpen}
+              onClose={() => {
+                setIsPaymentModalOpen(false);
+                setPaymentCity(null);
+              }}
+              onSuccess={handlePaymentSuccess}
+              userPhone={user.phone}
+              language={language || 'en'}
+              city={paymentCity || ''}
+            />
+
+            {activeChat && (
+              <ChatComponent
+                chatId={activeChat.id}
+                currentUserId={user.uid}
+                messages={messages}
+                onSendMessage={(text) => setMessages([...messages, { id: 'msg_' + Date.now(), text, senderUid: user.uid, createdAt: new Date().toISOString() }])}
+                onBack={() => setActiveChat(null)}
+              />
+            )}
+          </>
         )}
       </div>
     </ErrorBoundary>
