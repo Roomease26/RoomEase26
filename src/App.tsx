@@ -118,7 +118,7 @@ export default function App() {
     const newUser: UserProfile = {
       uid: 'user_' + Date.now(),
       phone,
-      role: phone === '9999999999' ? 'admin' : 'user',
+      role: phone === '9322646638' ? 'admin' : 'user',
       loginExpiry: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
       acceptedTerms: false
     };

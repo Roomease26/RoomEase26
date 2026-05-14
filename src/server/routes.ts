@@ -35,16 +35,23 @@ router.post('/otp/send', async (req, res) => {
 
   console.log(`[OTP] Generated OTP for ${cleanPhone}: ${otp}`);
 
-  const apiKey = process.env.BULK_BLASTER_API_KEY || 'v3133PCKUDCn8lSJJWg5iqrJGZiYpRNT';
+  const apiKey = process.env.BULK_BLASTER_API_KEY;
+
+  if (!apiKey) {
+    console.error('[OTP] BULK_BLASTER_API_KEY is not configured in environment variables');
+    return res.json({ 
+      success: true, 
+      message: 'SMS Service not configured. (Test Mode Enabled: Use 123456)', 
+      testMode: true 
+    });
+  }
 
   console.log(`[OTP] Attempting to send SMS to ${fullPhone} via Bulk Blaster`);
 
   try {
-    // Bulk Blaster usually expects a specific format.
-    // Based on user request: POST, +91 format, dialCode: 91
     const response = await axios.post('https://bulkblaster-global-otp-290441563653.asia-south1.run.app/send-otp', {
       apiKey,
-      phone: fullPhone, // User requested +91 format
+      phone: fullPhone,
       dialCode: '91',
       otp
     }, {
@@ -52,7 +59,7 @@ router.post('/otp/send', async (req, res) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      timeout: 15000 // 15s timeout
+      timeout: 15000
     });
     
     console.log('[OTP] Bulk Blaster API Success:', response.data);
@@ -64,21 +71,17 @@ router.post('/otp/send', async (req, res) => {
     console.error('[OTP] Bulk Blaster API Failure:', {
       message: error.message,
       data: errorData,
-      status: errorStatus,
-      url: 'https://bulkblaster-global-otp-290441563653.asia-south1.run.app/send-otp'
+      status: errorStatus
     });
     
-    // Check if it's a known service error or a config error
     let userMsg = 'SMS Service currently unavailable.';
-    if (errorStatus === 401 || errorStatus === 403) userMsg = 'Invalid API Configuration (API Key).';
-    if (error.code === 'ECONNABORTED') userMsg = 'SMS service timed out. Please try again.';
+    if (errorStatus === 401 || errorStatus === 403) userMsg = 'Invalid API Credentials.';
+    if (error.code === 'ECONNABORTED') userMsg = 'SMS service timed out.';
 
-    // Fallback to test mode if API fails, allowing 123456
     res.json({ 
       success: true, 
       message: `${userMsg} (Test Mode Enabled: Use 123456)`, 
-      testMode: true,
-      debug: process.env.NODE_ENV !== 'production' ? { error: error.message, details: errorData } : undefined
+      testMode: true
     });
   }
 });
