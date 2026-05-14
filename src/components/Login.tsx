@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Phone, ShieldCheck, ArrowRight } from 'lucide-react';
+import { Phone, ShieldCheck, ArrowRight, Loader2 } from 'lucide-react';
 import axios from 'axios';
 import { Language } from '../types';
 import { translations } from '../translations';
@@ -17,6 +17,7 @@ export default function Login({ onLogin, language }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [cooldown, setCooldown] = useState(0);
+  const [isTestMode, setIsTestMode] = useState(false);
 
   const t = translations[language];
 
@@ -37,11 +38,17 @@ export default function Login({ onLogin, language }: Props) {
     }
     setLoading(true);
     setError('');
+    setIsTestMode(false);
     try {
-      await axios.post('/api/otp/send', { phone });
+      console.log(`[Frontend] Requesting OTP for ${phone}`);
+      const res = await axios.post('/api/otp/send', { phone });
       setStep('otp');
       setCooldown(60);
+      if (res.data.testMode) {
+        setIsTestMode(true);
+      }
     } catch (err: any) {
+      console.error('[Frontend] Send OTP Error:', err);
       setError(err.response?.data?.error || 'Failed to send OTP. Please try again.');
     } finally {
       setLoading(false);
@@ -56,9 +63,11 @@ export default function Login({ onLogin, language }: Props) {
     setLoading(true);
     setError('');
     try {
+      console.log(`[Frontend] Verifying OTP for ${phone}`);
       await axios.post('/api/otp/verify', { phone, otp });
       onLogin(phone);
     } catch (err: any) {
+      console.error('[Frontend] Verify OTP Error:', err);
       setError(err.response?.data?.error || 'Invalid OTP. Please try again.');
     } finally {
       setLoading(false);
@@ -92,6 +101,12 @@ export default function Login({ onLogin, language }: Props) {
             </div>
           )}
 
+          {isTestMode && step === 'otp' && (
+            <div className="mb-6 p-3 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium border border-blue-100">
+              {language === 'en' ? 'Use 123456 as OTP if not received' : 'यदि OTP प्राप्त नहीं हुआ है तो 123456 का उपयोग करें'}
+            </div>
+          )}
+
           <div className="space-y-4">
             {step === 'phone' ? (
               <>
@@ -111,9 +126,18 @@ export default function Login({ onLogin, language }: Props) {
                 <button
                   onClick={handleSendOtp}
                   disabled={loading || cooldown > 0}
-                  className="w-full sleek-btn-primary disabled:opacity-50"
+                  className="w-full sleek-btn-primary disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {loading ? t.sending : cooldown > 0 ? `${t.resend} in ${cooldown}s` : t.send_otp}
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {t.sending}...
+                    </>
+                  ) : cooldown > 0 ? (
+                    `${t.resend} in ${cooldown}s`
+                  ) : (
+                    t.send_otp
+                  )}
                 </button>
               </>
             ) : (
@@ -131,9 +155,16 @@ export default function Login({ onLogin, language }: Props) {
                 <button
                   onClick={handleVerifyOtp}
                   disabled={loading}
-                  className="w-full sleek-btn-dark"
+                  className="w-full sleek-btn-dark disabled:opacity-50 flex items-center justify-center gap-2"
                 >
-                  {loading ? t.verifying : t.verify_otp}
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {t.verifying}...
+                    </>
+                  ) : (
+                    t.verify_otp
+                  )}
                 </button>
                 <div className="flex flex-col gap-4 mt-4">
                   <button

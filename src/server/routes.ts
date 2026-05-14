@@ -26,18 +26,35 @@ router.post('/otp/send', async (req, res) => {
 
   const apiKey = process.env.BULK_BLASTER_API_KEY || 'v3133PCKUDCn8lSJJWg5iqrJGZiYpRNT';
 
+  console.log(`[OTP] Sending OTP to ${phone}. DialCode: 91, OTP: ${otp}`);
+
   try {
     const response = await axios.post('https://bulkblaster-global-otp-290441563653.asia-south1.run.app/send-otp', {
       apiKey,
       phone,
       dialCode: '91',
       otp
+    }, {
+      timeout: 10000 // 10s timeout
     });
-    console.log('Bulk Blaster API Response:', response.data);
+    
+    console.log('[OTP] Bulk Blaster API Success:', response.data);
     res.json({ success: true, message: 'OTP sent successfully' });
   } catch (error: any) {
-    console.error('SMS API Error:', error.response?.data || error.message);
-    res.json({ success: true, message: 'OTP send triggered (Check server logs if not received)', testMode: true });
+    console.error('[OTP] Bulk Blaster API Error:', {
+      message: error.message,
+      data: error.response?.data,
+      status: error.response?.status
+    });
+    
+    // In production, we'd report an error, but for the user's specific request
+    // we return success with a testMode flag to allow 123456 fallback check
+    res.json({ 
+      success: true, 
+      message: 'OTP triggered (Check server logs if not received)', 
+      testMode: true,
+      debug: process.env.NODE_ENV !== 'production' ? error.response?.data : undefined
+    });
   }
 });
 
