@@ -1,9 +1,11 @@
 export type Language = 'en' | 'hi' | 'mr';
 
+export type UserRole = 'finder' | 'owner' | 'admin';
+
 export interface UserProfile {
   uid: string;
   phone: string;
-  role: 'user' | 'admin';
+  role: UserRole;
   paymentExpiry?: string;
   loginExpiry: string;
   acceptedTerms?: boolean;
@@ -15,6 +17,14 @@ export interface UserProfile {
   subscriptionStatus?: 'active' | 'expired' | 'none';
   subscriptionActive?: boolean;
   expiryDate?: string;
+}
+
+export interface Area {
+  id: string;
+  city: City;
+  areaName: string;
+  createdBy: string;
+  createdAt: string;
 }
 
 export interface Listing {

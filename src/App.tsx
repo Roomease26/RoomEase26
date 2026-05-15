@@ -4,10 +4,13 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Language, UserProfile, Listing, City, Chat, Message, INITIAL_AREAS, PRICING } from './types';
+import { 
+  City, CITIES, INITIAL_AREAS, Language, UserProfile, Listing, Message, Chat, Area, UserRole, PRICING 
+} from './types';
 import { Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import LanguageSelector from './components/LanguageSelector';
 import Login from './components/Login';
+import RoleSelection from './components/RoleSelection';
 import TermsAndConditions from './components/TermsAndConditions';
 import CitySelector from './components/CitySelector';
 import ListingList from './components/ListingList';
@@ -22,7 +25,7 @@ import SearchTab from './components/SearchTab';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Search } from 'lucide-react';
 import { translations } from './translations';
-import { userService, listingService, paymentService } from './services/dataService';
+import { userService, listingService, paymentService, areaService } from './services/dataService';
 import { isFirebaseConfigured } from './lib/firebase';
 
 export default function App() {
@@ -39,6 +42,7 @@ export default function App() {
   const [paymentCity, setPaymentCity] = useState<City | null>(null);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [areas, setAreas] = useState<Record<City, string[]>>(INITIAL_AREAS);
+  const [rawAreas, setRawAreas] = useState<Area[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
 
@@ -52,6 +56,21 @@ export default function App() {
   // Listen to Listings
   useEffect(() => {
     const unsubscribe = listingService.listenToListings(setListings);
+    return () => unsubscribe();
+  }, []);
+
+  // Listen to Areas
+  useEffect(() => {
+    const unsubscribe = areaService.listenToAreas((fetchedAreas) => {
+      setRawAreas(fetchedAreas);
+      const mergedAreas = { ...INITIAL_AREAS };
+      fetchedAreas.forEach(a => {
+        if (!mergedAreas[a.city].includes(a.areaName)) {
+          mergedAreas[a.city] = [...mergedAreas[a.city], a.areaName];
+        }
+      });
+      setAreas(mergedAreas);
+    });
     return () => unsubscribe();
   }, []);
 
@@ -119,7 +138,7 @@ export default function App() {
         const newUser: UserProfile = {
           uid,
           phone,
-          role: phone === '9322646638' ? 'admin' : 'user',
+          role: phone === '9322646638' ? 'admin' : 'finder', // Default but will prompt
           loginExpiry,
           acceptedTerms: false,
           language: language || 'en',
@@ -135,7 +154,8 @@ export default function App() {
       } else {
         // Requirement: If user already exists, update last login time only
         const updates: Partial<UserProfile> = {
-          loginTime: now
+          loginTime: now,
+          lastActive: now
         };
         await userService.updateProfile(uid, updates);
         profile = { ...profile, ...updates };
@@ -143,6 +163,15 @@ export default function App() {
 
       setUser(profile);
       localStorage.setItem('roomease_user', JSON.stringify(profile));
+      
+      // If no role set (for some reason) or it's a first time, role selection might be needed.
+      // But we set a default role above. We'll check if they need to CHOOSE.
+      if (!profile.role || profile.role === 'finder') {
+        // We'll let them choose anyway on first login if we want to be explicit
+        navigate('/role-selection');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error) {
       console.error('[App] Login failed:', error);
       // Fallback for demo when Firebase is not configured
@@ -150,7 +179,7 @@ export default function App() {
       const mockUser: UserProfile = {
         uid: 'u_' + phone,
         phone,
-        role: phone === '9322646638' ? 'admin' : 'user',
+        role: phone === '9322646638' ? 'admin' : 'finder',
         loginExpiry,
         acceptedTerms: false,
         language: language || 'en',
@@ -208,6 +237,20 @@ export default function App() {
     }
   };
 
+  const handleRoleSelect = async (role: UserRole) => {
+    if (user) {
+      try {
+        const updatedUser = { ...user, role };
+        setUser(updatedUser);
+        localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
+        await userService.updateProfile(user.uid, { role });
+        navigate('/dashboard');
+      } catch (error) {
+        console.error('[App] Role selection failed:', error);
+      }
+    }
+  };
+
   const isCityPaid = (city: string) => {
     if (user?.role === 'admin') return true;
     if (!user?.unlockedCities) return false;
@@ -231,6 +274,14 @@ export default function App() {
       };
       setAreas(updatedAreas);
       localStorage.setItem('roomease_areas', JSON.stringify(updatedAreas));
+    }
+  };
+
+  const handleDeleteListing = async (listingId: string) => {
+    try {
+      await listingService.deleteListing(listingId);
+    } catch (error) {
+      console.error('[App] Failed to delete listing:', error);
     }
   };
 
@@ -308,7 +359,29 @@ export default function App() {
           />
         );
       case 'add':
-        return <OwnerDashboard areas={areas} language={language || 'en'} onAddListing={handleAddListing} />;
+        if (user?.role === 'owner' || user?.role === 'admin') {
+          return (
+            <OwnerDashboard 
+              areas={areas} 
+              language={language || 'en'} 
+              onAddListing={handleAddListing} 
+              onDeleteListing={handleDeleteListing}
+              currentUserId={user?.uid || ''}
+              listings={listings.filter(l => l.ownerUid === user?.uid)}
+            />
+          );
+        }
+        return (
+          <div className="p-6 text-center mt-20">
+            <p className="text-gray-500">{language === 'en' ? 'Only owners can list rooms.' : 'केवल मालिक ही कमरे सूचीबद्ध कर सकते हैं।'}</p>
+            <button 
+              onClick={() => navigate('/role-selection')}
+              className="mt-4 text-[#5469D4] font-bold"
+            >
+              {language === 'en' ? 'Switch to Owner Role' : 'मालिक भूमिका पर स्विच करें'}
+            </button>
+          </div>
+        );
       case 'chats':
         return (
           <div className="p-6">
@@ -332,7 +405,12 @@ export default function App() {
       case 'profile':
         return (
           <div className="space-y-6">
-            <Profile user={user!} language={language || 'en'} onLogout={handleLogout} />
+            <Profile 
+              user={user!} 
+              language={language || 'en'} 
+              onLogout={handleLogout} 
+              onSwitchRole={() => navigate('/role-selection')}
+            />
             <div className="px-6 pb-24">
               <ImageGenerator />
             </div>
@@ -393,6 +471,18 @@ export default function App() {
                 </div>
               )
             } 
+          />
+
+          <Route 
+            path="/role-selection" 
+            element={
+              !user ? <Navigate to="/login" /> : (
+                <RoleSelection 
+                  language={language || 'en'} 
+                  onSelect={handleRoleSelect} 
+                />
+              )
+            }
           />
 
           <Route 

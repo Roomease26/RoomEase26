@@ -1,13 +1,13 @@
 import React from 'react';
 import { Home, Search, PlusCircle, MessageCircle, User } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Language } from '../types';
+import { Language, UserRole } from '../types';
 import { translations } from '../translations';
 
 interface Props {
   activeTab: string;
   onTabChange: (tab: string) => void;
-  role: 'user' | 'admin';
+  role: UserRole;
   language: Language;
 }
 
@@ -16,11 +16,18 @@ export default function Navigation({ activeTab, onTabChange, role, language }: P
   
   const tabs = [
     { id: 'home', icon: Home, label: t.home || 'Home' },
-    { id: 'search', icon: Search, label: t.search || 'Search' },
-    { id: 'add', icon: PlusCircle, label: language === 'en' ? 'List' : language === 'hi' ? 'लिस्ट' : 'लिस्ट' },
-    { id: 'chats', icon: MessageCircle, label: t.chats || 'Chats' },
-    { id: 'profile', icon: User, label: language === 'en' ? 'Profile' : language === 'hi' ? 'प्रोफ़ाइल' : 'प्रोफाईल' },
   ];
+
+  if (role === 'owner') {
+    tabs.push({ id: 'add', icon: PlusCircle, label: t.list_room_role });
+  } else {
+    tabs.push({ id: 'search', icon: Search, label: t.search || 'Search' });
+  }
+
+  tabs.push(
+    { id: 'chats', icon: MessageCircle, label: t.chats || 'Chats' },
+    { id: 'profile', icon: User, label: t.profile || 'Profile' }
+  );
 
   if (role === 'admin') {
     tabs.push({ id: 'admin', icon: User, label: 'Admin' });

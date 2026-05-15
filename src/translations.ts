@@ -46,7 +46,20 @@ export const translations = {
     listing_success: "Listing Successful!",
     live_msg: "Your room is now live on RoomEase.",
     add_another: "Add Another Listing",
-    form_desc: "Fill in the details to reach verified tenants"
+    form_desc: "Fill in the details to reach verified tenants",
+    select_role: "Select Your Role",
+    find_room: "Find Room",
+    list_room_role: "List Room",
+    role_description: "Choose how you want to use RoomEase today. You can always change this later in profile settings.",
+    finder: "Room Finder",
+    owner: "Room Owner",
+    area_not_found: "Area not found? Add new area",
+    add_area: "Add New Area",
+    area_name: "Area Name",
+    area_name_hint: "Min 3 characters, e.g. Ram Nagar",
+    area_added_success: "Area added successfully!",
+    duplicate_area: "This area already exists in this city",
+    invalid_area: "Invalid area name. Please use only letters and spaces."
   },
   hi: {
     welcome: "आसानी से सही कमरा ढूंढें, मालिक से सुरक्षित तरीके से बात करें और अपना समय बचाएं।",
@@ -95,7 +108,20 @@ export const translations = {
     listing_success: "लिस्टिंग सफल रही!",
     live_msg: "आपका कमरा अब RoomEase पर लाइव है।",
     add_another: "एक और लिस्टिंग जोड़ें",
-    form_desc: "सत्यापित किरायेदारों तक पहुंचने के लिए विवरण भरें"
+    form_desc: "सत्यापित किरायेदारों तक पहुंचने के लिए विवरण भरें",
+    select_role: "अपनी भूमिका चुनें",
+    find_room: "कमरा खोजें",
+    list_room_role: "कमरा लिस्ट करें",
+    role_description: "आज आप RoomEase का उपयोग कैसे करना चाहते हैं चुनें। आप इसे बाद में प्रोफ़ाइल सेटिंग्स में बदल सकते हैं।",
+    finder: "कमरा खोजने वाला",
+    owner: "कमरा मालिक",
+    area_not_found: "एरिया नहीं मिला? नया एरिया जोड़ें",
+    add_area: "नया एरिया जोड़ें",
+    area_name: "एरिया का नाम",
+    area_name_hint: "न्यूनतम 3 अक्षर, जैसे राम नगर",
+    area_added_success: "एरिया सफलतापूर्वक जोड़ा गया!",
+    duplicate_area: "यह एरिया इस शहर में पहले से मौजूद है",
+    invalid_area: "अमान्य एरिया नाम। कृपया केवल अक्षरों और स्थानों का उपयोग करें।"
   },
   mr: {
     welcome: "योग्य खोली सहज शोधा, मालकाशी सुरक्षित संपर्क करा आणि तुमचा वेळ वाचवा.",
@@ -144,6 +170,19 @@ export const translations = {
     listing_success: "लिस्टिंग यशस्वी झाली!",
     live_msg: "तुमची खोली आता RoomEase वर लाइव्ह आहे.",
     add_another: "आणखी एक लिस्टिंग जोडा",
-    form_desc: "व्हेरिफाईड भाडेकरूंपर्यंत पोहोचण्यासाठी तपशील भरा"
+    form_desc: "व्हेरिफाईड भाडेकरूंपर्यंत पोहोचण्यासाठी तपशील भरा",
+    select_role: "तुमची भूमिका निवडा",
+    find_room: "खोली शोधा",
+    list_room_role: "खोली लिस्ट करा",
+    role_description: "तुम्हाला आज RoomEase कसे वापरायचे आहे ते निवडा. तुम्ही हे नंतर प्रोफाइल सेटिंग्जमध्ये बदलू शकता।",
+    finder: "खोली शोधणारा",
+    owner: "खोली मालक",
+    area_not_found: "एरिया सापडला नाही? नवीन एरिया जोडा",
+    add_area: "नवीन एरिया जोडा",
+    area_name: "एरियाचे नाव",
+    area_name_hint: "किमान 3 अक्षरे, उदा. राम नगर",
+    area_added_success: "एरिया यशस्वीरित्या जोडला!",
+    duplicate_area: "हा एरिया या शहरात आधीच अस्तित्वात आहे",
+    invalid_area: "अवैध एरिया नाव। कृपया फक्त अक्षरे आणि जागा वापरा।"
   }
 };
