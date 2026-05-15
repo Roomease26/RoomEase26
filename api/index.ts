@@ -3,11 +3,20 @@ import axios from 'axios';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 
-// In-memory store for OTPs (Note: Vercel functions are stateless, but this works for single-node small scale or same-container requests)
-const otpStore = new Map<string, { otp: string, lastSent: number }>();
+// In-memory store for OTPs
+const otpStore = new Map<string, { 
+  otp: string, 
+  lastSent: number, 
+  requestCount: number,
+  firstRequestedAt: number 
+}>();
 
 const app = express();
 app.use(express.json());
+
+const COOLDOWN_TIME = 600000; // 10 minutes
+const MAX_REQUESTS = 5;
+const RATE_LIMIT_WINDOW = 3600000; // 1 hour
 
 console.log('[Vercel API] Handler initialized');
 
@@ -35,15 +44,45 @@ app.post('/api/otp/send', async (req, res) => {
 
     const fullPhone = `+91${cleanPhone}`;
     const now = Date.now();
-    const existing = otpStore.get(cleanPhone);
+    let existing = otpStore.get(cleanPhone);
     
-    if (existing && (now - existing.lastSent) < 30000) {
-      const remaining = Math.ceil((30000 - (now - existing.lastSent)) / 1000);
-      return res.status(429).json({ error: `Please wait ${remaining} seconds` });
+    if (existing) {
+      // Cooldown check
+      if ((now - existing.lastSent) < COOLDOWN_TIME) {
+        const remainingMs = COOLDOWN_TIME - (now - existing.lastSent);
+        const remainingSeconds = Math.ceil(remainingMs / 1000);
+        return res.status(429).json({ 
+          error: `Please wait ${remainingSeconds} seconds before requesting again.`,
+          remainingSeconds
+        });
+      }
+
+      // Rate limit check
+      if ((now - existing.firstRequestedAt) < RATE_LIMIT_WINDOW) {
+        if (existing.requestCount >= MAX_REQUESTS) {
+          return res.status(429).json({ 
+            error: 'Maximum OTP requests exceeded. Please try again after an hour.' 
+          });
+        }
+        existing.requestCount += 1;
+      } else {
+        // Reset window
+        existing.requestCount = 1;
+        existing.firstRequestedAt = now;
+      }
+      existing.lastSent = now;
+    } else {
+      existing = { 
+        otp: '', 
+        lastSent: now, 
+        requestCount: 1, 
+        firstRequestedAt: now 
+      };
+      otpStore.set(cleanPhone, existing);
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore.set(cleanPhone, { otp, lastSent: now });
+    existing.otp = otp;
 
     console.log(`[OTP] Generated OTP for ${cleanPhone}: ${otp}`);
 
@@ -54,7 +93,8 @@ app.post('/api/otp/send', async (req, res) => {
       return res.json({ 
         success: true, 
         message: 'SMS Service not configured. (Test Mode Enabled: Use 123456)', 
-        testMode: true 
+        testMode: true,
+        remainingSeconds: COOLDOWN_TIME / 1000
       });
     }
 
@@ -69,13 +109,18 @@ app.post('/api/otp/send', async (req, res) => {
         timeout: 10000
       });
       
-      return res.json({ success: true, message: 'OTP sent successfully' });
+      return res.json({ 
+        success: true, 
+        message: 'OTP sent successfully',
+        remainingSeconds: COOLDOWN_TIME / 1000
+      });
     } catch (apiError: any) {
       console.error('[OTP] API Error:', apiError.message);
       return res.json({ 
         success: true, 
         message: 'SMS Service delay. (Test Mode Enabled: Use 123456)', 
-        testMode: true 
+        testMode: true,
+        remainingSeconds: COOLDOWN_TIME / 1000
       });
     }
   } catch (err: any) {

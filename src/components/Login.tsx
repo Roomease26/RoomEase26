@@ -23,10 +23,28 @@ export default function Login({ onLogin, language }: Props) {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [cooldown, setCooldown] = useState(0);
   const [isTestMode, setIsTestMode] = useState(false);
 
   const t = translations[language];
+
+  // Load and sync cooldown state
+  useEffect(() => {
+    const savedCooldown = localStorage.getItem(`otp_cooldown_${phone}`);
+    const savedTime = localStorage.getItem(`otp_time_${phone}`);
+    
+    if (savedCooldown && savedTime) {
+      const elapsed = Math.floor((Date.now() - parseInt(savedTime)) / 1000);
+      const remaining = parseInt(savedCooldown) - elapsed;
+      if (remaining > 0) {
+        setCooldown(remaining);
+      } else {
+        localStorage.removeItem(`otp_cooldown_${phone}`);
+        localStorage.removeItem(`otp_time_${phone}`);
+      }
+    }
+  }, [phone]);
 
   useEffect(() => {
     const urlPhone = searchParams.get('phone');
@@ -43,11 +61,25 @@ export default function Login({ onLogin, language }: Props) {
     let timer: NodeJS.Timeout;
     if (cooldown > 0) {
       timer = setInterval(() => {
-        setCooldown((prev) => prev - 1);
+        setCooldown((prev) => {
+          const next = prev - 1;
+          if (next <= 0) {
+            localStorage.removeItem(`otp_cooldown_${phone}`);
+            localStorage.removeItem(`otp_time_${phone}`);
+            return 0;
+          }
+          return next;
+        });
       }, 1000);
     }
     return () => clearInterval(timer);
-  }, [cooldown]);
+  }, [cooldown, phone]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleSendOtp = async () => {
     if (phone.length < 10) {
@@ -56,6 +88,7 @@ export default function Login({ onLogin, language }: Props) {
     }
     setLoading(true);
     setError('');
+    setSuccess('');
     setIsTestMode(false);
     try {
       console.log(`[Login] Requesting OTP for ${phone}`);
@@ -63,18 +96,23 @@ export default function Login({ onLogin, language }: Props) {
       
       console.log('[Login] API Success Response:', res.data);
       
-      setCooldown(30); 
+      const newCooldown = res.data.remainingSeconds || 600;
+      setCooldown(newCooldown);
+      localStorage.setItem(`otp_cooldown_${phone}`, newCooldown.toString());
+      localStorage.setItem(`otp_time_${phone}`, Date.now().toString());
       
       if (res.data.testMode) {
         setIsTestMode(true);
       }
       
-      if (res.data.message && res.data.testMode) {
-        setError(String(res.data.message)); 
+      if (res.data.success) {
+        setSuccess(res.data.message || 'OTP sent successfully');
       }
 
       console.log('[Login] OTP send success, navigating to verify');
-      navigate(`/verify?phone=${phone}`);
+      if (!isVerifyPage) {
+        navigate(`/verify?phone=${phone}`);
+      }
     } catch (err: any) {
       console.error('[Login] Send OTP Error:', err);
       const errorData = err.response?.data;
@@ -89,6 +127,11 @@ export default function Login({ onLogin, language }: Props) {
       }
       
       setError(String(displayMsg));
+      if (err.response?.status === 429 && errorData?.remainingSeconds) {
+        setCooldown(errorData.remainingSeconds);
+        localStorage.setItem(`otp_cooldown_${phone}`, errorData.remainingSeconds.toString());
+        localStorage.setItem(`otp_time_${phone}`, Date.now().toString());
+      }
     } finally {
       setLoading(false);
     }
@@ -101,10 +144,16 @@ export default function Login({ onLogin, language }: Props) {
     }
     setLoading(true);
     setError('');
+    setSuccess('');
     try {
       console.log(`[Login] Verifying OTP for ${phone}`);
       await axios.post('/api/otp/verify', { phone, otp });
       console.log('[Login] OTP verified successfully');
+      
+      // Clear cooldown on success
+      localStorage.removeItem(`otp_cooldown_${phone}`);
+      localStorage.removeItem(`otp_time_${phone}`);
+      
       onLogin(phone);
       navigate('/dashboard');
     } catch (err: any) {
@@ -154,6 +203,12 @@ export default function Login({ onLogin, language }: Props) {
             </div>
           )}
 
+          {success && (
+            <div className="mb-6 p-4 bg-green-50 text-green-600 rounded-2xl text-[13px] font-medium border border-green-100 animate-in fade-in slide-in-from-top-2">
+              {String(success)}
+            </div>
+          )}
+
           {isTestMode && isVerifyPage && (
             <div className="mb-6 p-4 bg-blue-50 text-blue-600 rounded-2xl text-[13px] font-medium border border-blue-100">
               {language === 'en' ? 'Use 123456 as OTP if not received' : 'यदि OTP प्राप्त नहीं हुआ है तो 123456 का उपयोग करें'}
@@ -184,7 +239,7 @@ export default function Login({ onLogin, language }: Props) {
                   {loading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
                   ) : cooldown > 0 ? (
-                    `Resend in ${cooldown}s`
+                    `Resend OTP in ${formatTime(cooldown)}`
                   ) : (
                     <>
                       {t.send_otp}
@@ -226,7 +281,7 @@ export default function Login({ onLogin, language }: Props) {
                     disabled={loading || cooldown > 0}
                     className="text-[#5469D4] font-bold text-xs disabled:opacity-50 hover:underline"
                   >
-                    {cooldown > 0 ? `${t.resend} OTP in ${cooldown}s` : `Didn't receive OTP? ${t.resend}`}
+                    {cooldown > 0 ? `Resend OTP in ${formatTime(cooldown)}` : `Didn't receive OTP? ${t.resend}`}
                   </button>
                   <button
                     onClick={() => navigate('/login')}
