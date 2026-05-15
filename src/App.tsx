@@ -252,20 +252,25 @@ export default function App() {
       try {
         console.log('[App] Switching role to:', role);
         setIsSwitchingRole(true);
+        
+        // Instant Firestore update
+        await userService.updateProfile(user.uid, { role });
+        
+        // Update local state immediately after DB success
         const updatedUser = { ...user, role };
         setUser(updatedUser);
         localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
-        await userService.updateProfile(user.uid, { role });
         
-        // Brief delay for feedback
+        // Brief delay for visual feedback of the "Switching..." state
         setTimeout(() => {
           setIsSwitchingRole(false);
-          setActiveTab('home'); // Reset tab to home for new role view
-          navigate('/dashboard');
-        }, 800);
+          setActiveTab('home');
+          navigate('/dashboard', { replace: true });
+        }, 600);
       } catch (error) {
         console.error('[App] Role selection failed:', error);
         setIsSwitchingRole(false);
+        alert('Failed to switch role. Please check your connection.');
       }
     }
   };

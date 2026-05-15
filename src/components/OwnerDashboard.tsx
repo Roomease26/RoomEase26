@@ -17,6 +17,9 @@ interface Props {
 
 export default function OwnerDashboard({ areas, language, onAddListing, onDeleteListing, currentUserId, listings }: Props) {
   const [activeSubTab, setActiveSubTab] = useState<'add' | 'manage'>('add');
+  const [step, setStep] = useState<1 | 2>(1);
+  const [searchArea, setSearchArea] = useState('');
+  const [showAreaModal, setShowAreaModal] = useState(false);
   const [city, setCity] = useState<City>(CITIES[0]);
   const [area, setArea] = useState(areas[CITIES[0]]?.[0] || '');
   const [address, setAddress] = useState('');
@@ -28,6 +31,7 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
   const [photos, setPhotos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [customArea, setCustomArea] = useState('');
   const [isCustomArea, setIsCustomArea] = useState(false);
   const [areaError, setAreaError] = useState('');
@@ -94,7 +98,7 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
         createdAt: new Date().toISOString()
       });
       setArea(formatted);
-      setIsCustomArea(false);
+      setShowAreaModal(false);
       setCustomArea('');
       setLoading(false);
       showToast(language === 'en' ? 'Area added successfully!' : 'क्षेत्र सफलतापूर्वक जोड़ा गया!');
@@ -138,7 +142,19 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
         photos,
         createdAt: new Date().toISOString()
       });
-      setIsSuccess(true);
+      console.log('[OwnerDashboard] Listing created successfully');
+      setShowSuccessPopup(true);
+      
+      // Auto redirect after 2 seconds
+      setTimeout(() => {
+        setShowSuccessPopup(false);
+        setActiveSubTab('manage');
+        setStep(1); // Reset step for next time
+        setPhotos([]);
+        setAddress('');
+        setLandmark('');
+      }, 2500);
+      
     } catch (err) {
       console.error('[OwnerDashboard] Submission failed:', err);
       showToast('Failed to save listing. Please try again.', 'error');
@@ -148,29 +164,7 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
   };
 
   if (isSuccess) {
-    return (
-      <div className="min-h-screen bg-[#F7F9FC] flex flex-col items-center justify-center p-6 text-center">
-        <motion.div
-          initial={{ scale: 0.5, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="w-20 h-20 bg-[#33CC66] rounded-full flex items-center justify-center mb-6 shadow-lg shadow-green-100"
-        >
-          <Check className="w-10 h-10 text-white" />
-        </motion.div>
-        <h2 className="text-2xl font-bold text-[#1A1F36] mb-2">
-          {t.listing_success}
-        </h2>
-        <p className="text-[#697386] mb-8">
-          {t.live_msg}
-        </p>
-        <button 
-          onClick={() => setIsSuccess(false)}
-          className="sleek-btn-primary px-8"
-        >
-          {t.add_another}
-        </button>
-      </div>
-    );
+    return null; // Handle via popup now
   }
 
   return (
@@ -181,6 +175,31 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
             toast.type === 'success' ? 'bg-[#33CC66]' : 'bg-red-500'
           }`}>
             {toast.message}
+          </div>
+        )}
+
+        {/* Success Popup */}
+        {showSuccessPopup && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-[32px] p-8 text-center shadow-2xl max-w-xs w-full"
+            >
+              <div className="w-20 h-20 bg-[#33CC66] rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-100">
+                <Check className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-[#1A1F36] mb-2 uppercase tracking-wide">
+                {language === 'en' ? 'Success!' : 'सफल!'}
+              </h2>
+              <p className="text-[#697386] font-medium leading-relaxed">
+                ✅ {language === 'en' ? 'Room listing added successfully' : 'रूम लिस्टिंग सफलतापूर्वक जोड़ी गई'}
+              </p>
+              <div className="mt-6 flex items-center justify-center gap-2 text-[10px] font-bold text-[#33CC66] uppercase tracking-widest">
+                <div className="w-3 h-3 border-2 border-[#33CC66] border-t-transparent rounded-full animate-spin"></div>
+                Redirecting...
+              </div>
+            </motion.div>
           </div>
         )}
         <header className="mb-8">
@@ -210,205 +229,186 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
         </header>
 
         {activeSubTab === 'add' ? (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Photo Upload */}
-            <div className="space-y-3">
-              <div className="flex justify-between items-end">
-                <label className="text-[12px] font-bold text-[#1A1F36] uppercase tracking-wider">
-                  {language === 'en' ? 'Photos' : language === 'hi' ? 'फोटो' : 'फोटो'} (1-10)
-                </label>
-                <span className="text-[10px] font-bold text-[#697386]">{photos.length}/10</span>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                {photos.map((photo, i) => (
-                  <div key={i} className="aspect-square rounded-2xl overflow-hidden bg-slate-200 relative group">
-                    <img src={photo} alt="" className="w-full h-full object-cover" />
-                    <button 
-                      type="button"
-                      onClick={() => setPhotos(photos.filter((_, idx) => idx !== i))}
-                      className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                    {i === 0 && (
-                      <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[8px] font-bold text-center py-1">
-                        COVER
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {photos.length < 10 && (
-                  <label className="aspect-square rounded-2xl border-2 border-dashed border-[#E3E8EE] flex flex-col items-center justify-center cursor-pointer hover:border-[#5469D4] hover:bg-[#EBF1FF] transition-all">
-                    <Camera className="w-6 h-6 text-[#697386] mb-1" />
-                    <span className="text-[10px] font-bold text-[#697386] uppercase">{t.add}</span>
-                    <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
-                  </label>
-                )}
-              </div>
+          <div className="space-y-6">
+            {/* Step Indicators */}
+            <div className="flex items-center gap-2 mb-4">
+              <div className={`h-1.5 flex-1 rounded-full ${step >= 1 ? 'bg-[#5469D4]' : 'bg-[#E3E8EE]'}`} />
+              <div className={`h-1.5 flex-1 rounded-full ${step >= 2 ? 'bg-[#5469D4]' : 'bg-[#E3E8EE]'}`} />
             </div>
 
-            {/* Location */}
-            <div className="sleek-card p-6 space-y-4">
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-[#697386] uppercase">{t.select_city}</label>
-                <select 
-                  value={city} 
-                  onChange={(e) => {
-                    const newCity = e.target.value as City;
-                    setCity(newCity);
-                    setArea(areas[newCity]?.[0] || '');
-                    setIsCustomArea(false);
+            {step === 1 ? (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-6"
+              >
+                <div className="space-y-3">
+                  <div className="flex justify-between items-end">
+                    <label className="text-[12px] font-bold text-[#1A1F36] uppercase tracking-wider">
+                      {language === 'en' ? 'Step 1: Upload Photos' : 'स्टेप 1: फोटो अपलोड करें'} (1-10)
+                    </label>
+                    <span className="text-[10px] font-bold text-[#697386]">{photos.length}/10</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    {photos.map((photo, i) => (
+                      <div key={i} className="aspect-square rounded-2xl overflow-hidden bg-slate-200 relative group">
+                        <img src={photo} alt="" className="w-full h-full object-cover" />
+                        <button 
+                          type="button"
+                          onClick={() => setPhotos(photos.filter((_, idx) => idx !== i))}
+                          className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {photos.length < 10 && (
+                      <label className="aspect-square rounded-2xl border-2 border-dashed border-[#E3E8EE] flex flex-col items-center justify-center cursor-pointer hover:border-[#5469D4] hover:bg-[#EBF1FF] transition-all">
+                        <Camera className="w-6 h-6 text-[#697386] mb-1" />
+                        <span className="text-[10px] font-bold text-[#697386] uppercase">{t.add}</span>
+                        <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoUpload} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (photos.length === 0) {
+                      showToast(language === 'en' ? 'Upload at least 1 photo' : 'कम से कम 1 फोटो अपलोड करें', 'error');
+                      return;
+                    }
+                    setStep(2);
                   }}
-                  className="w-full sleek-input"
+                  className="w-full sleek-btn-primary py-5 text-lg shadow-lg flex items-center justify-center gap-2"
                 >
-                  {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-[#697386] uppercase">{t.select_area}</label>
-                {isCustomArea ? (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder={t.area_name}
-                        value={customArea}
+                  {language === 'en' ? 'Next: Enter Details' : 'अगला: विवरण भरें'}
+                </button>
+              </motion.div>
+            ) : (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="space-y-6"
+              >
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {/* Location */}
+                  <div className="sleek-card p-6 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-[#697386] uppercase">{t.select_city}</label>
+                      <select 
+                        value={city} 
                         onChange={(e) => {
-                          setCustomArea(e.target.value);
-                          setAreaError('');
+                          const newCity = e.target.value as City;
+                          setCity(newCity);
+                          setArea(areas[newCity]?.[0] || '');
                         }}
-                        className={`flex-1 sleek-input ${areaError ? 'border-red-500' : ''}`}
-                      />
-                      <button 
-                        type="button"
-                        onClick={handleAddNewArea}
-                        disabled={loading || !customArea.trim()}
-                        className="bg-[#5469D4] text-white px-4 rounded-xl font-bold text-xs disabled:opacity-50"
+                        className="w-full sleek-input"
                       >
-                        {t.add}
-                      </button>
+                        {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
                     </div>
-                    {areaError && (
-                      <div className="flex items-center gap-1 text-red-500 text-[10px] font-bold">
-                        <AlertCircle className="w-3 h-3" />
-                        {areaError}
+
+                    <div className="space-y-1.5 relative">
+                      <label className="text-[11px] font-bold text-[#697386] uppercase">{t.select_area}</label>
+                      <div className="flex flex-col gap-2">
+                        <input
+                          type="text"
+                          placeholder={language === 'en' ? "Search area..." : "क्षेत्र खोजें..."}
+                          className="w-full sleek-input"
+                          value={searchArea}
+                          onChange={(e) => setSearchArea(e.target.value)}
+                        />
+                        <select 
+                          value={area} 
+                          onChange={(e) => {
+                            if (e.target.value === 'custom') {
+                              setShowAreaModal(true);
+                            } else {
+                              setArea(e.target.value);
+                            }
+                          }}
+                          className="w-full sleek-input"
+                        >
+                          {(areas[city] || [])
+                            .filter(a => a.toLowerCase().includes(searchArea.toLowerCase()))
+                            .map(a => <option key={a} value={a}>{a}</option>)}
+                          <option value="custom">+ {t.add_area}</option>
+                        </select>
+                        <button 
+                          type="button"
+                          onClick={() => setShowAreaModal(true)}
+                          className="text-[10px] font-bold text-[#5469D4] uppercase text-left hover:underline"
+                        >
+                          {t.area_not_found}
+                        </button>
                       </div>
-                    )}
-                    <button 
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-bold text-[#697386] uppercase">{language === 'en' ? 'Address' : 'पता'}</label>
+                      <textarea 
+                        value={address}
+                        onChange={(e) => setAddress(e.target.value)}
+                        placeholder={language === 'en' ? 'Full address' : 'पूरा पता'}
+                        className="w-full sleek-input min-h-[80px]"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Availability */}
+                  <div className="sleek-card p-6 space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="w-5 h-5 text-[#5469D4]" />
+                      <h3 className="font-bold text-[#1A1F36]">{language === 'en' ? 'Availability' : 'उपलब्धता'}</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-[#697386] uppercase">Days</label>
+                        <input value={days} onChange={(e) => setDays(e.target.value)} className="w-full sleek-input" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-[#697386] uppercase">Time</label>
+                        <input value={slots} onChange={(e) => setSlots(e.target.value)} className="w-full sleek-input" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
                       type="button"
-                      onClick={() => {
-                        setIsCustomArea(false);
-                        setAreaError('');
-                      }}
-                      className="text-[10px] font-bold text-[#697386] uppercase tracking-wider"
+                      onClick={() => setStep(1)}
+                      className="flex-1 bg-white border-2 border-[#E3E8EE] py-4 rounded-2xl font-bold text-[#697386]"
                     >
-                      ← {translations[language].back}
+                      {translations[language].back}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="flex-[2] sleek-btn-primary py-4 shadow-lg flex items-center justify-center gap-2"
+                    >
+                      {loading ? (
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <>
+                          {language === 'en' ? 'Finish & List' : 'लिस्ट करें'}
+                          <Check className="w-5 h-5" />
+                        </>
+                      )}
                     </button>
                   </div>
-                ) : (
-                  <select 
-                    value={area} 
-                    onChange={(e) => {
-                      if (e.target.value === 'custom') {
-                        setIsCustomArea(true);
-                        setAreaError('');
-                      } else {
-                        setArea(e.target.value);
-                      }
-                    }}
-                    className="w-full sleek-input"
-                  >
-                    {(areas[city] || []).map(a => <option key={a} value={a}>{a}</option>)}
-                    <option value="custom">+ {t.add_area}</option>
-                  </select>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-[#697386] uppercase">{language === 'en' ? 'Address' : language === 'hi' ? 'पता' : 'पत्ता'}</label>
-                <textarea 
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder={language === 'en' ? 'Full address of the room' : language === 'hi' ? 'कमरे का पूरा पता' : 'खोलीचा पूर्ण पत्ता'}
-                  className="w-full sleek-input min-h-[80px]"
-                  required
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-[#697386] uppercase">{language === 'en' ? 'Landmark' : language === 'hi' ? 'लैंडमार्क' : 'लँडमार्क'}</label>
-                <input 
-                  type="text"
-                  value={landmark}
-                  onChange={(e) => setLandmark(e.target.value)}
-                  placeholder={language === 'en' ? 'Near which famous place?' : language === 'hi' ? 'किस प्रसिद्ध स्थान के पास?' : 'कोणत्या प्रसिद्ध ठिकाणाजवळ?'}
-                  className="w-full sleek-input"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* Availability */}
-            <div className="sleek-card p-6 space-y-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Clock className="w-5 h-5 text-[#5469D4]" />
-                <h3 className="font-bold text-[#1A1F36]">{language === 'en' ? 'Availability' : language === 'hi' ? 'उपलब्धता' : 'उपलब्धता'}</h3>
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-[#697386] uppercase">{language === 'en' ? 'Days' : language === 'hi' ? 'दिन' : 'दिवस'}</label>
-                <input 
-                  type="text"
-                  value={days}
-                  onChange={(e) => setDays(e.target.value)}
-                  placeholder="e.g. Mon–Sat"
-                  className="w-full sleek-input"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-[#697386] uppercase">{language === 'en' ? 'Time Slots' : language === 'hi' ? 'समय स्लॉट' : 'वेळ स्लॉट'}</label>
-                <input 
-                  type="text"
-                  value={slots}
-                  onChange={(e) => setSlots(e.target.value)}
-                  placeholder="e.g. 10 AM – 1 PM, 5 PM – 8 PM"
-                  className="w-full sleek-input"
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStatus('Available Now')}
-                  className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${
-                    status === 'Available Now' ? "bg-[#33CC66] text-white" : "bg-[#F7F9FC] text-[#697386]"
-                  }`}
-                >
-                  {t.available}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatus('Not Available')}
-                  className={`flex-1 py-3 rounded-xl font-bold text-xs transition-all ${
-                    status === 'Not Available' ? "bg-red-500 text-white" : "bg-[#F7F9FC] text-[#697386]"
-                  }`}
-                >
-                  {t.not_available}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full sleek-btn-primary py-5 text-lg shadow-lg flex items-center justify-center gap-2"
-            >
-              {loading ? (language === 'en' ? 'Adding Listing...' : language === 'hi' ? 'लिस्टिंग जोड़ी जा रही है...' : 'लिस्टिंग जोडली जात आहे...') : (language === 'en' ? 'List My Room' : language === 'hi' ? 'मेरा कमरा लिस्ट करें' : 'माझी खोली लिस्ट करा')}
-              {!loading && <Plus className="w-5 h-5" />}
-            </button>
-          </form>
+                </form>
+              </motion.div>
+            )}
+          </div>
         ) : (
           <div className="space-y-4">
             {listings.length === 0 ? (
               <div className="text-center py-12 bg-white rounded-3xl border-2 border-dashed border-[#E3E8EE]">
                 <Plus className="w-10 h-10 text-[#697386] mx-auto mb-3 opacity-20" />
                 <p className="text-[#697386] text-sm">No listings yet</p>
+                <button onClick={() => setActiveSubTab('add')} className="mt-4 text-[#5469D4] font-bold">Add One Now</button>
               </div>
             ) : (
               listings.map((item) => (
@@ -419,7 +419,7 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (confirm(language === 'en' ? 'Delete this listing?' : 'इस लिस्टिंग को हटा दें?')) {
+                          if (confirm(language === 'en' ? 'Delete this listing?' : 'हटाएँ?')) {
                             onDeleteListing(item.id);
                           }
                         }}
@@ -428,11 +428,6 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className={`absolute bottom-2 left-2 px-2 py-1 rounded text-[10px] font-bold uppercase ${
-                      item.availability.status === 'Available Now' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-                    }`}>
-                      {item.availability.status === 'Available Now' ? t.available : t.not_available}
-                    </div>
                   </div>
                   <div className="p-4">
                     <div className="flex items-center gap-1 text-[10px] font-bold text-[#5469D4] uppercase tracking-wider mb-1">
@@ -440,19 +435,80 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
                       {item.city} • {item.area}
                     </div>
                     <h3 className="font-bold text-[#1A1F36] text-sm truncate">{item.address}</h3>
-                    <div className="mt-3 pt-3 border-t border-[#E3E8EE] flex justify-between items-center">
-                      <div className="flex items-center gap-2 text-[#697386]">
+                    <div className="mt-3 pt-3 border-t border-[#E3E8EE] flex justify-between items-center text-[#697386]">
+                      <div className="flex items-center gap-2">
                         <Clock className="w-3 h-3" />
                         <span className="text-[10px]">{item.availability.days}</span>
                       </div>
-                      <button className="text-[10px] font-bold text-[#5469D4] uppercase flex items-center gap-1">
-                        Edit <ExternalLink className="w-3 h-3" />
-                      </button>
+                      <span className="text-[10px] uppercase font-bold">{item.availability.status === 'Available Now' ? 'Live' : 'Hidden'}</span>
                     </div>
                   </div>
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* Add Area Modal */}
+        {showAreaModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-[#1A1F36]">{t.add_area}</h3>
+                <button onClick={() => setShowAreaModal(false)}>
+                  <X className="w-6 h-6 text-[#697386]" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-[#697386] uppercase tracking-wider">City</label>
+                  <div className="w-full p-4 bg-slate-50 rounded-2xl text-sm font-bold text-[#1A1F36] border border-[#E3E8EE]">
+                    {city}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-[#697386] uppercase tracking-wider">{t.area_name}</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Ram Nagar"
+                    value={customArea}
+                    onChange={(e) => {
+                      setCustomArea(e.target.value);
+                      setAreaError('');
+                    }}
+                    className={`w-full sleek-input ${areaError ? 'border-red-500' : ''}`}
+                    autoFocus
+                  />
+                  {areaError && (
+                    <p className="text-[10px] font-bold text-red-500 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {areaError}
+                    </p>
+                  )}
+                  <p className="text-[10px] text-[#697386] italic">{t.area_name_hint}</p>
+                </div>
+
+                <button
+                  onClick={handleAddNewArea}
+                  disabled={loading || !customArea.trim()}
+                  className="w-full sleek-btn-primary py-4 mt-2 flex items-center justify-center gap-2"
+                >
+                  {loading ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      {t.add}
+                      <Check className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
       </div>
