@@ -57,9 +57,36 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["text", "senderUid", "createdAt"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment records for subscriptions",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "razorpayOrderId": { "type": "string" },
+        "razorpayPaymentId": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "status", "createdAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Admin user list",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" }
+      },
+      "required": ["userId"]
     }
   },
   "firestore": {
+    "/admins/{userId}": {
+      "schema": "Admin",
+      "description": "Admin users"
+    },
     "/users/{userId}": {
       "schema": "User",
       "description": "User profiles"
@@ -75,6 +102,10 @@
     "/chats/{chatId}/messages/{messageId}": {
       "schema": "Message",
       "description": "Messages within a chat"
+    },
+    "/payments/{paymentId}": {
+      "schema": "Payment",
+      "description": "Payment records"
     }
   }
 }

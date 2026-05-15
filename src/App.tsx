@@ -22,6 +22,7 @@ import SearchTab from './components/SearchTab';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Search } from 'lucide-react';
 import { translations } from './translations';
+import { userService, listingService, paymentService } from './services/dataService';
 
 export default function App() {
   const navigate = useNavigate();
@@ -37,6 +38,8 @@ export default function App() {
   const [paymentCity, setPaymentCity] = useState<City | null>(null);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [areas, setAreas] = useState<Record<City, string[]>>(INITIAL_AREAS);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
 
   // Sync language selection to localStorage
   useEffect(() => {
@@ -44,6 +47,25 @@ export default function App() {
       localStorage.setItem('roomease_lang', language);
     }
   }, [language]);
+
+  // Listen to Listings
+  useEffect(() => {
+    const unsubscribe = listingService.listenToListings(setListings);
+    return () => unsubscribe();
+  }, []);
+
+  // Listen to Profile if user is logged in
+  useEffect(() => {
+    if (user?.uid) {
+      const unsubscribe = userService.listenToProfile(user.uid, (profile) => {
+        if (profile) {
+          setUser(profile);
+          localStorage.setItem('roomease_user', JSON.stringify(profile));
+        }
+      });
+      return () => unsubscribe();
+    }
+  }, [user?.uid]);
 
   // Handle high-level redirects
   useEffect(() => {
@@ -55,49 +77,8 @@ export default function App() {
     }
   }, [language, user, location.pathname, navigate]);
 
-  // Use translations
-  const t = language ? translations[language] : translations.en;
-
-  // Mock Data (Listings state)
-  const [listings, setListings] = useState<Listing[]>([
-    {
-      id: 'list_1',
-      city: 'Bramhapuri',
-      area: 'Main Market',
-      address: 'Shop No. 12, Main Market Road',
-      landmark: 'Near SBI Bank',
-      photos: ['https://picsum.photos/seed/room1/800/600'],
-      availability: { days: 'Mon–Sat', slots: '10 AM – 1 PM, 5 PM – 8 PM', status: 'Available Now' },
-      ownerUid: 'owner_1',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'list_2',
-      city: 'Bramhapuri',
-      area: 'College Road',
-      address: 'Plot 45, Vidya Nagar',
-      landmark: 'Opposite Science College',
-      photos: ['https://picsum.photos/seed/room2/800/600'],
-      availability: { days: 'All Days', slots: '9 AM – 9 PM', status: 'Available Now' },
-      ownerUid: 'owner_2',
-      createdAt: new Date().toISOString()
-    },
-    {
-      id: 'list_3',
-      city: 'Gadchiroli',
-      area: 'Complex Area',
-      address: 'House 102, Sector 2',
-      landmark: 'Behind LIC Office',
-      photos: ['https://picsum.photos/seed/room3/800/600'],
-      availability: { days: 'Mon–Fri', slots: '6 PM – 9 PM', status: 'Not Available' },
-      ownerUid: 'owner_3',
-      createdAt: new Date().toISOString()
-    }
-  ]);
-  const [messages, setMessages] = useState<Message[]>([]);
-
+  // Load session from localStorage
   useEffect(() => {
-    // Load session from localStorage
     const savedUser = localStorage.getItem('roomease_user');
     if (savedUser) {
       const parsed = JSON.parse(savedUser);
@@ -114,23 +95,34 @@ export default function App() {
     }
   }, []);
 
-  const handleLogin = (phone: string) => {
-    const newUser: UserProfile = {
-      uid: 'user_' + Date.now(),
-      phone,
-      role: phone === '9322646638' ? 'admin' : 'user',
-      loginExpiry: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(),
-      acceptedTerms: false
-    };
-    setUser(newUser);
-    localStorage.setItem('roomease_user', JSON.stringify(newUser));
+  const handleLogin = async (phone: string) => {
+    // In a real app, you'd use Firebase Auth, but here we use a custom UID based on phone
+    const uid = 'u_' + phone; 
+    let profile = await userService.getProfile(uid);
+    
+    if (!profile) {
+      const loginExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+      const newUser: UserProfile = {
+        uid,
+        phone,
+        role: phone === '9322646638' ? 'admin' : 'user',
+        loginExpiry,
+        acceptedTerms: false
+      };
+      await userService.createProfile(uid, newUser);
+      profile = newUser;
+    }
+
+    setUser(profile);
+    localStorage.setItem('roomease_user', JSON.stringify(profile));
   };
 
-  const handleAcceptTerms = () => {
+  const handleAcceptTerms = async () => {
     if (user) {
       const updatedUser = { ...user, acceptedTerms: true };
       setUser(updatedUser);
       localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
+      await userService.updateProfile(user.uid, { acceptedTerms: true });
     }
   };
 
@@ -139,23 +131,30 @@ export default function App() {
     localStorage.removeItem('roomease_user');
   };
 
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = async (details: any) => {
     if (user && paymentCity) {
-      // Set expiry to 11:59 PM on the 5th day
       const expiryDate = new Date();
       expiryDate.setDate(expiryDate.getDate() + PRICING.VALIDITY_DAYS);
       expiryDate.setHours(23, 59, 59, 999);
       
-      const updatedUser: UserProfile = {
-        ...user,
-        unlockedCities: {
-          ...(user.unlockedCities || {}),
-          [paymentCity]: expiryDate.toISOString()
-        },
-        paymentExpiry: expiryDate.toISOString(), // Keep for general "premium" indicators if needed
+      const updatedCities = {
+        ...(user.unlockedCities || {}),
+        [paymentCity]: expiryDate.toISOString()
       };
-      setUser(updatedUser);
-      localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
+
+      await userService.updateProfile(user.uid, {
+        unlockedCities: updatedCities,
+        paymentExpiry: expiryDate.toISOString()
+      });
+
+      await paymentService.recordPayment({
+        userId: user.uid,
+        amount: PRICING.UNLOCK_FEE,
+        city: paymentCity,
+        status: 'success',
+        ...details
+      });
+
       setIsPaymentModalOpen(false);
       setPaymentCity(null);
     }
@@ -169,15 +168,13 @@ export default function App() {
     return new Date(expiry) > new Date();
   };
 
-  const handleAddListing = (listing: Omit<Listing, 'id' | 'ownerUid'>) => {
-    const newListing = {
+  const handleAddListing = async (listing: Omit<Listing, 'id' | 'ownerUid'>) => {
+    await listingService.createListing({
       ...listing,
-      id: 'list_' + Date.now(),
       ownerUid: user?.uid || 'anonymous'
-    };
-    setListings([...listings, newListing]);
+    });
     
-    // Save new area if it doesn't exist
+    // Save new area if it doesn't exist locally for UI (would ideally sync from DB too)
     const city = listing.city as City;
     if (!areas[city].includes(listing.area)) {
       const updatedAreas = {
@@ -188,6 +185,8 @@ export default function App() {
       localStorage.setItem('roomease_areas', JSON.stringify(updatedAreas));
     }
   };
+
+  const t = language ? translations[language] : translations.en;
 
   const isPaid = user?.paymentExpiry ? new Date(user.paymentExpiry) > new Date() : false;
 
@@ -293,15 +292,7 @@ export default function App() {
         );
       case 'admin':
         if (user?.role !== 'admin') return null;
-        return (
-          <AdminPanel
-            users={[user]}
-            listings={listings}
-            payments={[]}
-            onDeleteListing={(id) => setListings(listings.filter(l => l.id !== id))}
-            onDeleteUser={() => {}}
-          />
-        );
+        return <AdminPanel />;
       default:
         return null;
     }
