@@ -68,6 +68,18 @@ export default function App() {
     }
   }, [user?.uid]);
 
+  // Update selected city and last active time
+  useEffect(() => {
+    if (user?.uid && selectedLocation?.city) {
+      if (user.selectedCity !== selectedLocation.city) {
+        userService.updateProfile(user.uid, {
+          selectedCity: selectedLocation.city,
+          lastActive: new Date().toISOString()
+        }).catch(err => console.error('[App] Update location error:', err));
+      }
+    }
+  }, [selectedLocation?.city, user?.uid]);
+
   // Handle high-level redirects
   useEffect(() => {
     console.log('[App] Route changed:', location.pathname);
@@ -98,21 +110,35 @@ export default function App() {
 
   const handleLogin = async (phone: string) => {
     try {
-      // In a real app, you'd use Firebase Auth, but here we use a custom UID based on phone
       const uid = 'u_' + phone; 
       let profile = await userService.getProfile(uid);
+      const now = new Date().toISOString();
+      const loginExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
       
       if (!profile) {
-        const loginExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
         const newUser: UserProfile = {
           uid,
           phone,
           role: phone === '9322646638' ? 'admin' : 'user',
           loginExpiry,
-          acceptedTerms: false
+          acceptedTerms: false,
+          language: language || 'en',
+          loginTime: now,
+          lastActive: now,
+          subscriptionStatus: 'none'
         };
         await userService.createProfile(uid, newUser);
         profile = newUser;
+      } else {
+        const isSubscribed = profile.paymentExpiry ? new Date(profile.paymentExpiry) > new Date() : false;
+        const updates: Partial<UserProfile> = {
+          lastActive: now,
+          loginTime: now,
+          language: language || profile.language || 'en',
+          subscriptionStatus: isSubscribed ? 'active' : (profile.paymentExpiry ? 'expired' : 'none')
+        };
+        await userService.updateProfile(uid, updates);
+        profile = { ...profile, ...updates };
       }
 
       setUser(profile);
@@ -126,7 +152,9 @@ export default function App() {
         phone,
         role: phone === '9322646638' ? 'admin' : 'user',
         loginExpiry,
-        acceptedTerms: false
+        acceptedTerms: false,
+        language: language || 'en',
+        subscriptionStatus: 'none'
       };
       setUser(mockUser);
       localStorage.setItem('roomease_user', JSON.stringify(mockUser));

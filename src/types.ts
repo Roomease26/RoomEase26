@@ -8,6 +8,11 @@ export interface UserProfile {
   loginExpiry: string;
   acceptedTerms?: boolean;
   unlockedCities?: Record<string, string>;
+  language?: Language;
+  loginTime?: string;
+  lastActive?: string;
+  selectedCity?: City;
+  subscriptionStatus?: 'active' | 'expired' | 'none';
 }
 
 export interface Listing {
