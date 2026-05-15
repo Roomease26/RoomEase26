@@ -13,7 +13,9 @@
         "loginTime": { "type": "string", "format": "date-time" },
         "lastActive": { "type": "string", "format": "date-time" },
         "selectedCity": { "type": "string" },
-        "subscriptionStatus": { "type": "string", "enum": ["active", "expired", "none"] }
+        "subscriptionStatus": { "type": "string", "enum": ["active", "expired", "none"] },
+        "subscriptionActive": { "type": "boolean" },
+        "expiryDate": { "type": "string", "format": "date-time" }
       },
       "required": ["phone", "role"]
     },
@@ -92,7 +94,7 @@
       "schema": "Admin",
       "description": "Admin users"
     },
-    "/users/{userId}": {
+    "/Users/{userId}": {
       "schema": "User",
       "description": "User profiles"
     },

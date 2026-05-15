@@ -41,6 +41,8 @@ service cloud.firestore {
              (data.lastActive == null || data.lastActive is string) &&
              (data.selectedCity == null || data.selectedCity is string) &&
              (data.subscriptionStatus == null || data.subscriptionStatus in ['active', 'expired', 'none']) &&
+             (data.subscriptionActive == null || data.subscriptionActive is bool) &&
+             (data.expiryDate == null || data.expiryDate is string) &&
              (data.acceptedTerms == null || data.acceptedTerms is bool) &&
              (data.uid == null || data.uid is string);
     }
@@ -87,7 +89,7 @@ service cloud.firestore {
     }
 
     // Users Collection
-    match /users/{userId} {
+    match /Users/{userId} {
       allow read: if true; // Allow reading user profiles for chat/identification
       allow create: if true; // Allow registration
       allow update: if true; // Allow updates (could be more restrictive but keeping it simple for prototype)

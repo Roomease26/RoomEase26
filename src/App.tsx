@@ -126,14 +126,16 @@ export default function App() {
           loginTime: now,
           lastActive: now,
           subscriptionStatus: 'none',
+          subscriptionActive: false,
+          expiryDate: '',
           selectedCity: selectedLocation?.city
         };
         await userService.createProfile(uid, newUser);
         profile = newUser;
       } else {
-        // Requirement: If user already exists, update last active time only
+        // Requirement: If user already exists, update last login time only
         const updates: Partial<UserProfile> = {
-          lastActive: now
+          loginTime: now
         };
         await userService.updateProfile(uid, updates);
         profile = { ...profile, ...updates };

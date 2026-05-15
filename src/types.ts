@@ -13,6 +13,8 @@ export interface UserProfile {
   lastActive?: string;
   selectedCity?: City;
   subscriptionStatus?: 'active' | 'expired' | 'none';
+  subscriptionActive?: boolean;
+  expiryDate?: string;
 }
 
 export interface Listing {

@@ -41,11 +41,11 @@ export const userService = {
   async getProfile(uid: string): Promise<UserProfile | null> {
     try {
       checkConfig();
-      const docRef = doc(db, 'users', uid);
+      const docRef = doc(db, 'Users', uid);
       const docSnap = await getDoc(docRef);
       return docSnap.exists() ? (docSnap.data() as UserProfile) : null;
     } catch (error) {
-      handleFirestoreError(error, 'get', `users/${uid}`);
+      handleFirestoreError(error, 'get', `Users/${uid}`);
       return null;
     }
   },
@@ -53,7 +53,7 @@ export const userService = {
   async createProfile(uid: string, profile: Partial<UserProfile>): Promise<void> {
     try {
       checkConfig();
-      const docRef = doc(db, 'users', uid);
+      const docRef = doc(db, 'Users', uid);
       await setDoc(docRef, {
         ...profile,
         uid,
@@ -61,18 +61,20 @@ export const userService = {
         role: profile.role || 'user',
         createdAt: serverTimestamp(),
       });
+      console.log('[Users] Profile created in Firestore for:', uid);
     } catch (error) {
-      handleFirestoreError(error, 'write', `users/${uid}`);
+      handleFirestoreError(error, 'write', `Users/${uid}`);
     }
   },
 
   async updateProfile(uid: string, updates: Partial<UserProfile>): Promise<void> {
     try {
       checkConfig();
-      const docRef = doc(db, 'users', uid);
+      const docRef = doc(db, 'Users', uid);
       await updateDoc(docRef, updates);
+      console.log('[Users] Profile updated in Firestore for:', uid);
     } catch (error) {
-      handleFirestoreError(error, 'update', `users/${uid}`);
+      handleFirestoreError(error, 'update', `Users/${uid}`);
     }
   },
 
@@ -82,14 +84,14 @@ export const userService = {
       return () => {};
     }
     try {
-      const docRef = doc(db, 'users', uid);
+      const docRef = doc(db, 'Users', uid);
       return onSnapshot(docRef, (doc) => {
         callback(doc.exists() ? (doc.data() as UserProfile) : null);
       }, (error) => {
-        handleFirestoreError(error, 'listen', `users/${uid}`);
+        handleFirestoreError(error, 'listen', `Users/${uid}`);
       });
     } catch (error) {
-      handleFirestoreError(error, 'listen-init', `users/${uid}`);
+      handleFirestoreError(error, 'listen-init', `Users/${uid}`);
       return () => {};
     }
   },
@@ -97,10 +99,10 @@ export const userService = {
   async getAllUsers(): Promise<UserProfile[]> {
     try {
       checkConfig();
-      const querySnapshot = await getDocs(collection(db, 'users'));
+      const querySnapshot = await getDocs(collection(db, 'Users'));
       return querySnapshot.docs.map(doc => doc.data() as UserProfile);
     } catch (error) {
-      handleFirestoreError(error, 'list', 'users');
+      handleFirestoreError(error, 'list', 'Users');
       return [];
     }
   }
