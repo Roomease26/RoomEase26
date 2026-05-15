@@ -76,6 +76,7 @@ export const userService = {
       console.log('[Users] Profile updated in Firestore for:', uid);
     } catch (error) {
       handleFirestoreError(error, 'update', `users/${uid}`);
+      throw error; // RE-THROW so caller knows it failed
     }
   },
 

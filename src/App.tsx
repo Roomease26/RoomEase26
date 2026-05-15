@@ -248,30 +248,62 @@ export default function App() {
   };
 
   const handleRoleSelect = async (role: UserRole) => {
-    if (user) {
-      try {
-        console.log('[App] Switching role to:', role);
-        setIsSwitchingRole(true);
-        
-        // Instant Firestore update
+    if (!user || isSwitchingRole) return;
+    
+    let timeoutId: any;
+    try {
+      console.log('[App] Role switch process started for:', role);
+      setIsSwitchingRole(true);
+      
+      // Safety timeout - 8 seconds
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('TIMEOUT')), 8000);
+      });
+
+      // Role update to Firestore
+      const updatePromise = (async () => {
         await userService.updateProfile(user.uid, { role });
+        console.log('[App] Firestore role update complete');
         
-        // Update local state immediately after DB success
+        // Update local state
         const updatedUser = { ...user, role };
         setUser(updatedUser);
         localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
-        
-        // Brief delay for visual feedback of the "Switching..." state
-        setTimeout(() => {
-          setIsSwitchingRole(false);
-          setActiveTab('home');
-          navigate('/dashboard', { replace: true });
-        }, 600);
-      } catch (error) {
-        console.error('[App] Role selection failed:', error);
+        return true;
+      })();
+
+      // Race against timeout
+      await Promise.race([updatePromise, timeoutPromise]);
+      clearTimeout(timeoutId);
+
+      console.log('[App] Role switch successful. Navigating...');
+      
+      // Success feedback
+      const successMsg = language === 'en' ? '✅ Role switched successfully' : '✅ भूमिका सफलतापूर्वक बदली गई';
+      
+      // Brief delay for UX
+      setTimeout(() => {
         setIsSwitchingRole(false);
-        alert('Failed to switch role. Please check your connection.');
-      }
+        // Navigate based on role
+        if (role === 'owner' || role === 'admin') {
+          setActiveTab('add');
+        } else {
+          setActiveTab('home');
+        }
+        navigate('/dashboard', { replace: true });
+        console.log('[App] Navigation to dashboard complete');
+      }, 500);
+
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      console.error('[App] Role switch failed:', error);
+      setIsSwitchingRole(false);
+      
+      const errorMsg = error.message === 'TIMEOUT' 
+        ? (language === 'en' ? 'Update taking too long. Please try again.' : 'अपडेट में बहुत समय लग रहा है। कृपया पुनः प्रयास करें।')
+        : (language === 'en' ? 'Failed to switch role. Check connection.' : 'भूमिका बदलने में विफल। कनेक्शन जांचें।');
+      
+      alert(errorMsg);
     }
   };
 
