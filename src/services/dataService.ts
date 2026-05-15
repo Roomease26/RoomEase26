@@ -13,7 +13,7 @@ import {
   serverTimestamp,
   type DocumentData
 } from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
+import { db, auth, isFirebaseConfigured } from '../lib/firebase';
 import { UserProfile, Listing, Message, Chat } from '../types';
 
 // Error Handler
@@ -23,17 +23,24 @@ const handleFirestoreError = (error: any, operation: string, path: string | null
     operation,
     path,
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
+      userId: auth?.currentUser?.uid,
+      email: auth?.currentUser?.email,
     }
   };
   console.error('Firestore Error:', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  // Don't re-throw, just let the caller handle null/[]
+};
+
+const checkConfig = () => {
+  if (!isFirebaseConfigured || !db) {
+    throw new Error('Firebase is not configured. Please check your environment variables.');
+  }
 };
 
 export const userService = {
   async getProfile(uid: string): Promise<UserProfile | null> {
     try {
+      checkConfig();
       const docRef = doc(db, 'users', uid);
       const docSnap = await getDoc(docRef);
       return docSnap.exists() ? (docSnap.data() as UserProfile) : null;
@@ -45,6 +52,7 @@ export const userService = {
 
   async createProfile(uid: string, profile: Partial<UserProfile>): Promise<void> {
     try {
+      checkConfig();
       const docRef = doc(db, 'users', uid);
       await setDoc(docRef, {
         ...profile,
@@ -60,6 +68,7 @@ export const userService = {
 
   async updateProfile(uid: string, updates: Partial<UserProfile>): Promise<void> {
     try {
+      checkConfig();
       const docRef = doc(db, 'users', uid);
       await updateDoc(docRef, updates);
     } catch (error) {
@@ -68,16 +77,26 @@ export const userService = {
   },
 
   listenToProfile(uid: string, callback: (profile: UserProfile | null) => void) {
-    const docRef = doc(db, 'users', uid);
-    return onSnapshot(docRef, (doc) => {
-      callback(doc.exists() ? (doc.data() as UserProfile) : null);
-    }, (error) => {
-      handleFirestoreError(error, 'listen', `users/${uid}`);
-    });
+    if (!isFirebaseConfigured || !db) {
+      console.warn('[Firebase] Profile listener skipped: Firebase not configured');
+      return () => {};
+    }
+    try {
+      const docRef = doc(db, 'users', uid);
+      return onSnapshot(docRef, (doc) => {
+        callback(doc.exists() ? (doc.data() as UserProfile) : null);
+      }, (error) => {
+        handleFirestoreError(error, 'listen', `users/${uid}`);
+      });
+    } catch (error) {
+      handleFirestoreError(error, 'listen-init', `users/${uid}`);
+      return () => {};
+    }
   },
 
   async getAllUsers(): Promise<UserProfile[]> {
     try {
+      checkConfig();
       const querySnapshot = await getDocs(collection(db, 'users'));
       return querySnapshot.docs.map(doc => doc.data() as UserProfile);
     } catch (error) {
@@ -90,6 +109,7 @@ export const userService = {
 export const listingService = {
   async createListing(listing: Omit<Listing, 'id'>): Promise<string> {
     try {
+      checkConfig();
       const docRef = await addDoc(collection(db, 'listings'), {
         ...listing,
         createdAt: new Date().toISOString(), // Keeping string format as per blueprint
@@ -102,18 +122,28 @@ export const listingService = {
   },
 
   listenToListings(callback: (listings: Listing[]) => void) {
-    const q = query(collection(db, 'listings'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snapshot) => {
-      callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing)));
-    }, (error) => {
-      handleFirestoreError(error, 'list', 'listings');
-    });
+    if (!isFirebaseConfigured || !db) {
+      console.warn('[Firebase] Listings listener skipped: Firebase not configured');
+      return () => {};
+    }
+    try {
+      const q = query(collection(db, 'listings'), orderBy('createdAt', 'desc'));
+      return onSnapshot(q, (snapshot) => {
+        callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Listing)));
+      }, (error) => {
+        handleFirestoreError(error, 'list', 'listings');
+      });
+    } catch (error) {
+      handleFirestoreError(error, 'list-init', 'listings');
+      return () => {};
+    }
   }
 };
 
 export const paymentService = {
   async recordPayment(payment: any): Promise<void> {
     try {
+      checkConfig();
       await addDoc(collection(db, 'payments'), {
         ...payment,
         createdAt: new Date().toISOString(),
@@ -125,6 +155,7 @@ export const paymentService = {
 
   async getAllPayments(): Promise<any[]> {
     try {
+      checkConfig();
       const querySnapshot = await getDocs(collection(db, 'payments'));
       return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     } catch (error) {

@@ -23,6 +23,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { Search } from 'lucide-react';
 import { translations } from './translations';
 import { userService, listingService, paymentService } from './services/dataService';
+import { isFirebaseConfigured } from './lib/firebase';
 
 export default function App() {
   const navigate = useNavigate();
@@ -96,33 +97,52 @@ export default function App() {
   }, []);
 
   const handleLogin = async (phone: string) => {
-    // In a real app, you'd use Firebase Auth, but here we use a custom UID based on phone
-    const uid = 'u_' + phone; 
-    let profile = await userService.getProfile(uid);
-    
-    if (!profile) {
+    try {
+      // In a real app, you'd use Firebase Auth, but here we use a custom UID based on phone
+      const uid = 'u_' + phone; 
+      let profile = await userService.getProfile(uid);
+      
+      if (!profile) {
+        const loginExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+        const newUser: UserProfile = {
+          uid,
+          phone,
+          role: phone === '9322646638' ? 'admin' : 'user',
+          loginExpiry,
+          acceptedTerms: false
+        };
+        await userService.createProfile(uid, newUser);
+        profile = newUser;
+      }
+
+      setUser(profile);
+      localStorage.setItem('roomease_user', JSON.stringify(profile));
+    } catch (error) {
+      console.error('[App] Login failed:', error);
+      // Fallback for demo when Firebase is not configured
       const loginExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-      const newUser: UserProfile = {
-        uid,
+      const mockUser: UserProfile = {
+        uid: 'u_' + phone,
         phone,
         role: phone === '9322646638' ? 'admin' : 'user',
         loginExpiry,
         acceptedTerms: false
       };
-      await userService.createProfile(uid, newUser);
-      profile = newUser;
+      setUser(mockUser);
+      localStorage.setItem('roomease_user', JSON.stringify(mockUser));
     }
-
-    setUser(profile);
-    localStorage.setItem('roomease_user', JSON.stringify(profile));
   };
 
   const handleAcceptTerms = async () => {
     if (user) {
-      const updatedUser = { ...user, acceptedTerms: true };
-      setUser(updatedUser);
-      localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
-      await userService.updateProfile(user.uid, { acceptedTerms: true });
+      try {
+        const updatedUser = { ...user, acceptedTerms: true };
+        setUser(updatedUser);
+        localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
+        await userService.updateProfile(user.uid, { acceptedTerms: true });
+      } catch (error) {
+        console.error('[App] Failed to update terms:', error);
+      }
     }
   };
 
@@ -301,6 +321,12 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#F7F9FC]">
+        {!isFirebaseConfigured && (
+          <div className="bg-rose-500 text-white p-4 text-center font-bold text-sm shadow-lg sticky top-0 z-[100] animate-in slide-in-from-top duration-300">
+            ⚠️ Firebase is not configured properly. Some features may not work. 
+            Check your environment variables (VITE_FIREBASE_API_KEY, etc.)
+          </div>
+        )}
         <Routes>
           <Route 
             path="/" 
