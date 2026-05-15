@@ -31,21 +31,29 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
   const [customArea, setCustomArea] = useState('');
   const [isCustomArea, setIsCustomArea] = useState(false);
   const [areaError, setAreaError] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const t = translations[language];
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const formatAreaName = (name: string) => {
     return name
       .toLowerCase()
+      .trim()
       .split(' ')
+      .filter(Boolean)
       .map(word => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
   };
 
   const validateAreaName = (name: string) => {
-    if (name.length < 3) return t.area_name_hint;
-    if (name.length > 40) return 'Max 40 characters';
-    if (/[@!$#%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(name)) return t.invalid_area;
+    if (name.length < 3) return t.area_name_hint || 'Minimum 3 characters';
+    if (name.length > 40) return 'Maximum 40 characters';
+    if (/[@!$#%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(name)) return t.invalid_area || 'Special characters not allowed';
     return '';
   };
 
@@ -67,7 +75,9 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
 
   const handleAddNewArea = async () => {
     setAreaError('');
-    const formatted = formatAreaName(customArea.trim());
+    if (!customArea.trim()) return;
+    
+    const formatted = formatAreaName(customArea);
     const error = validateAreaName(formatted);
     if (error) {
       setAreaError(error);
@@ -76,6 +86,7 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
 
     try {
       setLoading(true);
+      console.log('[OwnerDashboard] Adding new area:', formatted, 'to city:', city);
       await areaService.addArea({
         city,
         areaName: formatted,
@@ -86,30 +97,54 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
       setIsCustomArea(false);
       setCustomArea('');
       setLoading(false);
+      showToast(language === 'en' ? 'Area added successfully!' : 'क्षेत्र सफलतापूर्वक जोड़ा गया!');
     } catch (err: any) {
-      setAreaError(err.message === 'Area already exists in this city' ? t.duplicate_area : err.message);
+      console.error('[OwnerDashboard] Failed to add area:', err);
+      setAreaError(err.message === 'Area already exists in this city' ? (t.duplicate_area || 'Area already exists') : err.message);
       setLoading(false);
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (photos.length === 0) {
       alert(language === 'en' ? 'Please upload at least 1 photo' : language === 'hi' ? 'कृपया कम से कम 1 फोटो अपलोड करें' : 'कृपया किमान १ फोटो अपलोड करा');
       return;
     }
+
     setLoading(true);
-    onAddListing({
-      city,
-      area: isCustomArea ? customArea : area,
-      address,
-      landmark,
-      availability: { days, slots, status },
-      photos,
-      createdAt: new Date().toISOString()
-    });
-    setIsSuccess(true);
-    setLoading(false);
+    let finalArea = area;
+
+    // If user is adding a custom area but didn't click the "Add" button
+    if (isCustomArea && customArea.trim()) {
+      const formatted = formatAreaName(customArea);
+      const error = validateAreaName(formatted);
+      if (error) {
+        setAreaError(error);
+        setLoading(false);
+        return;
+      }
+      finalArea = formatted;
+    }
+
+    try {
+      console.log('[OwnerDashboard] Submitting listing for area:', finalArea);
+      await onAddListing({
+        city,
+        area: finalArea,
+        address,
+        landmark,
+        availability: { days, slots, status },
+        photos,
+        createdAt: new Date().toISOString()
+      });
+      setIsSuccess(true);
+    } catch (err) {
+      console.error('[OwnerDashboard] Submission failed:', err);
+      showToast('Failed to save listing. Please try again.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (isSuccess) {
@@ -141,6 +176,13 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
   return (
     <div className="min-h-screen bg-[#F7F9FC] pb-24">
       <div className="max-w-md mx-auto p-6">
+        {toast && (
+          <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-2xl shadow-xl text-white font-bold text-sm animate-in fade-in slide-in-from-top-4 duration-300 ${
+            toast.type === 'success' ? 'bg-[#33CC66]' : 'bg-red-500'
+          }`}>
+            {toast.message}
+          </div>
+        )}
         <header className="mb-8">
           <div className="sleek-tag mb-2 inline-block">{t.owner_panel}</div>
           <h1 className="text-2xl font-bold text-[#1A1F36]">

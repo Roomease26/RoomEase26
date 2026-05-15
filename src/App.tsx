@@ -63,13 +63,21 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = areaService.listenToAreas((fetchedAreas) => {
       setRawAreas(fetchedAreas);
-      const mergedAreas = { ...INITIAL_AREAS };
+      // Create a fresh copy of INITIAL_AREAS
+      const mergedAreas: Record<City, string[]> = {} as any;
+      (Object.keys(INITIAL_AREAS) as City[]).forEach(city => {
+        mergedAreas[city] = [...INITIAL_AREAS[city]];
+      });
+
       fetchedAreas.forEach(a => {
-        if (!mergedAreas[a.city].includes(a.areaName)) {
+        if (mergedAreas[a.city] && !mergedAreas[a.city].includes(a.areaName)) {
           mergedAreas[a.city] = [...mergedAreas[a.city], a.areaName];
+        } else if (!mergedAreas[a.city]) {
+          console.warn('[App] Area city not found in CITIES:', a.city);
         }
       });
       setAreas(mergedAreas);
+      localStorage.setItem('roomease_areas', JSON.stringify(mergedAreas));
     });
     return () => unsubscribe();
   }, []);
@@ -126,6 +134,8 @@ export default function App() {
       setAreas(JSON.parse(savedAreas));
     }
   }, []);
+
+  const [isSwitchingRole, setIsSwitchingRole] = useState(false);
 
   const handleLogin = async (phone: string) => {
     try {
@@ -240,13 +250,22 @@ export default function App() {
   const handleRoleSelect = async (role: UserRole) => {
     if (user) {
       try {
+        console.log('[App] Switching role to:', role);
+        setIsSwitchingRole(true);
         const updatedUser = { ...user, role };
         setUser(updatedUser);
         localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
         await userService.updateProfile(user.uid, { role });
-        navigate('/dashboard');
+        
+        // Brief delay for feedback
+        setTimeout(() => {
+          setIsSwitchingRole(false);
+          setActiveTab('home'); // Reset tab to home for new role view
+          navigate('/dashboard');
+        }, 800);
       } catch (error) {
         console.error('[App] Role selection failed:', error);
+        setIsSwitchingRole(false);
       }
     }
   };
@@ -260,20 +279,36 @@ export default function App() {
   };
 
   const handleAddListing = async (listing: Omit<Listing, 'id' | 'ownerUid'>) => {
-    await listingService.createListing({
+    const listingId = await listingService.createListing({
       ...listing,
       ownerUid: user?.uid || 'anonymous'
     });
+    console.log('[App] Listing created with ID:', listingId);
     
-    // Save new area if it doesn't exist locally for UI (would ideally sync from DB too)
+    // Save new area if it doesn't exist in our merged list
     const city = listing.city as City;
     if (!areas[city].includes(listing.area)) {
+      console.log('[App] Auto-adding new area to Firestore:', listing.area);
+      
+      // Optimistic update
       const updatedAreas = {
         ...areas,
         [city]: [...areas[city], listing.area]
       };
       setAreas(updatedAreas);
-      localStorage.setItem('roomease_areas', JSON.stringify(updatedAreas));
+
+      try {
+        await areaService.addArea({
+          city,
+          areaName: listing.area,
+          createdBy: user?.uid || 'anonymous',
+          createdAt: new Date().toISOString()
+        });
+      } catch (err: any) {
+        if (err.message !== 'Area already exists in this city') {
+          console.error('[App] Failed to auto-save area:', err);
+        }
+      }
     }
   };
 
@@ -288,6 +323,35 @@ export default function App() {
   const t = language ? translations[language] : translations.en;
 
   const isPaid = user?.paymentExpiry ? new Date(user.paymentExpiry) > new Date() : false;
+
+  const handleSelectLocation = async (city: City, areaName: string) => {
+    const formatted = areaName.toLowerCase().trim().split(' ').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    setSelectedLocation({ city, area: formatted });
+    
+    if (!areas[city].includes(formatted)) {
+      console.log('[App] Saving custom search area:', formatted);
+      
+      // Optimistic update
+      const updatedAreas = {
+        ...areas,
+        [city]: [...areas[city], formatted]
+      };
+      setAreas(updatedAreas);
+
+      try {
+        await areaService.addArea({
+          city,
+          areaName: formatted,
+          createdBy: user?.uid || 'anonymous',
+          createdAt: new Date().toISOString()
+        });
+      } catch (err: any) {
+        if (err.message !== 'Area already exists in this city') {
+          console.error('[App] Search area save error:', err);
+        }
+      }
+    }
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -309,7 +373,7 @@ export default function App() {
               <CitySelector 
                 areas={areas}
                 language={language || 'en'}
-                onSelect={(city, area) => setSelectedLocation({ city, area })} 
+                onSelect={handleSelectLocation} 
               />
             </div>
           );
@@ -342,6 +406,7 @@ export default function App() {
           <SearchTab 
             listings={listings}
             user={user!}
+            areas={areas}
             isCityPaid={isCityPaid}
             language={language || 'en'}
             onUnlock={(city) => {
@@ -480,6 +545,7 @@ export default function App() {
                 <RoleSelection 
                   language={language || 'en'} 
                   onSelect={handleRoleSelect} 
+                  loading={isSwitchingRole}
                 />
               )
             }

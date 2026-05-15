@@ -7,9 +7,10 @@ import { motion } from 'motion/react';
 interface RoleSelectionProps {
   onSelect: (role: UserRole) => void;
   language: Language;
+  loading?: boolean;
 }
 
-const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelect, language }) => {
+const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelect, language, loading }) => {
   const t = translations[language];
 
   return (
@@ -28,8 +29,9 @@ const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelect, language }) => 
 
         <div className="grid gap-4">
           <button
-            onClick={() => onSelect('finder')}
-            className="group relative flex items-center p-6 bg-white border-2 border-transparent hover:border-[#5469D4] rounded-2xl shadow-sm transition-all text-left"
+            onClick={() => !loading && onSelect('finder')}
+            disabled={loading}
+            className={`group relative flex items-center p-6 bg-white border-2 border-transparent hover:border-[#5469D4] rounded-2xl shadow-sm transition-all text-left disabled:opacity-50 ${loading ? 'cursor-wait' : ''}`}
           >
             <div className="w-14 h-14 bg-blue-50 rounded-xl flex items-center justify-center text-[#5469D4] group-hover:bg-[#5469D4] group-hover:text-white transition-colors">
               <Search className="w-7 h-7" />
@@ -38,12 +40,13 @@ const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelect, language }) => 
               <h3 className="font-bold text-lg text-[#111827]">{t.find_room}</h3>
               <p className="text-sm text-[#6B7280]">{t.finder}</p>
             </div>
-            <ChevronRight className="w-5 h-5 text-[#9CA3AF] group-hover:text-[#5469D4] transition-colors" />
+            {!loading && <ChevronRight className="w-5 h-5 text-[#9CA3AF] group-hover:text-[#5469D4] transition-colors" />}
           </button>
 
           <button
-            onClick={() => onSelect('owner')}
-            className="group relative flex items-center p-6 bg-white border-2 border-transparent hover:border-[#5469D4] rounded-2xl shadow-sm transition-all text-left"
+            onClick={() => !loading && onSelect('owner')}
+            disabled={loading}
+            className={`group relative flex items-center p-6 bg-white border-2 border-transparent hover:border-[#5469D4] rounded-2xl shadow-sm transition-all text-left disabled:opacity-50 ${loading ? 'cursor-wait' : ''}`}
           >
             <div className="w-14 h-14 bg-indigo-50 rounded-xl flex items-center justify-center text-[#4F46E5] group-hover:bg-[#4F46E5] group-hover:text-white transition-colors">
               <Home className="w-7 h-7" />
@@ -52,9 +55,16 @@ const RoleSelection: React.FC<RoleSelectionProps> = ({ onSelect, language }) => 
               <h3 className="font-bold text-lg text-[#111827]">{t.list_room_role}</h3>
               <p className="text-sm text-[#6B7280]">{t.owner}</p>
             </div>
-            <ChevronRight className="w-5 h-5 text-[#9CA3AF] group-hover:text-[#4F46E5] transition-colors" />
+            {!loading && <ChevronRight className="w-5 h-5 text-[#9CA3AF] group-hover:text-[#4F46E5] transition-colors" />}
           </button>
         </div>
+        
+        {loading && (
+          <div className="flex flex-col items-center gap-3 mt-4">
+            <div className="w-6 h-6 border-2 border-[#5469D4] border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-xs font-bold text-[#5469D4] uppercase tracking-widest animate-pulse">Switching Role...</p>
+          </div>
+        )}
       </motion.div>
     </div>
   );

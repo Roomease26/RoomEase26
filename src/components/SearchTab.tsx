@@ -8,13 +8,14 @@ import { translations } from '../translations';
 interface Props {
   listings: Listing[];
   user: UserProfile;
+  areas: Record<string, string[]>;
   isCityPaid: (city: string) => boolean;
   language: Language;
   onUnlock: (city: string) => void;
   onChat: (listing: Listing) => void;
 }
 
-export default function SearchTab({ listings, user, isCityPaid, language, onUnlock, onChat }: Props) {
+export default function SearchTab({ listings, user, areas, isCityPaid, language, onUnlock, onChat }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCity, setSelectedCity] = useState<string>('');
   const [selectedArea, setSelectedArea] = useState<string>('');
@@ -71,7 +72,7 @@ export default function SearchTab({ listings, user, isCityPaid, language, onUnlo
                 disabled={!selectedCity}
               >
                 <option value="">{t.select_area}</option>
-                {selectedCity && INITIAL_AREAS[selectedCity as keyof typeof INITIAL_AREAS].map(area => (
+                {selectedCity && areas[selectedCity as keyof typeof areas]?.map(area => (
                   <option key={area} value={area}>{area}</option>
                 ))}
               </select>
