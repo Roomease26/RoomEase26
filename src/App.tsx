@@ -125,17 +125,15 @@ export default function App() {
           language: language || 'en',
           loginTime: now,
           lastActive: now,
-          subscriptionStatus: 'none'
+          subscriptionStatus: 'none',
+          selectedCity: selectedLocation?.city
         };
         await userService.createProfile(uid, newUser);
         profile = newUser;
       } else {
-        const isSubscribed = profile.paymentExpiry ? new Date(profile.paymentExpiry) > new Date() : false;
+        // Requirement: If user already exists, update last active time only
         const updates: Partial<UserProfile> = {
-          lastActive: now,
-          loginTime: now,
-          language: language || profile.language || 'en',
-          subscriptionStatus: isSubscribed ? 'active' : (profile.paymentExpiry ? 'expired' : 'none')
+          lastActive: now
         };
         await userService.updateProfile(uid, updates);
         profile = { ...profile, ...updates };
