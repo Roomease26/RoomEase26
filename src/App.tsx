@@ -10,7 +10,6 @@ import {
 import { Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import LanguageSelector from './components/LanguageSelector';
 import Login from './components/Login';
-import RoleSelection from './components/RoleSelection';
 import TermsAndConditions from './components/TermsAndConditions';
 import CitySelector from './components/CitySelector';
 import ListingList from './components/ListingList';
@@ -39,6 +38,7 @@ export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
+  const [homeView, setHomeView] = useState<'main' | 'finder' | 'owner'>('main');
   const [selectedLocation, setSelectedLocation] = useState<{ city: City; area: string } | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentCity, setPaymentCity] = useState<City | null>(null);
@@ -172,17 +172,10 @@ export default function App() {
       return;
     }
 
-    // 4. Role Selection
-    if (!user.roleChosen) {
-      if (path !== '/role-selection') {
-        console.log('[App] Guard: Redirecting to role selection');
-        navigate('/role-selection', { replace: true });
-      }
-      return;
-    }
+    // 4. Role Selection (REMOVED)
 
-    // 5. Normal Dashboard (Redirect if on onboarding pages but everything is ready)
-    if (['/login', '/verify', '/'].includes(path) && language && user.acceptedTerms && user.roleChosen) {
+    // 5. Normal Dashboard
+    if (['/login', '/verify', '/'].includes(path) && language && user.acceptedTerms) {
       navigate('/dashboard', { replace: true });
     }
   }, [user, language, isInitialLoading, location.pathname, navigate]);
@@ -220,8 +213,7 @@ export default function App() {
         const newUser: UserProfile = {
           uid,
           phone,
-          role: 'finder',
-          roleChosen: false, 
+          role: phone === '9322646638' ? 'admin' : 'finder',
           loginExpiry,
           acceptedTerms: false,
           language: language || 'en',
@@ -240,7 +232,9 @@ export default function App() {
           uid, 
           loginTime: now,
           lastActive: now,
-          loginExpiry
+          loginExpiry,
+          // Ensure specific phone gets admin
+          ...(phone === '9322646638' ? { role: 'admin' as UserRole } : {})
         };
         await userService.updateProfile(profile.uid, updates);
         profile = { ...profile, ...updates };
@@ -250,6 +244,9 @@ export default function App() {
       localStorage.setItem('roomease_user', JSON.stringify(profile));
       showToast(language === 'en' ? 'Welcome back!' : 'वापसी पर स्वागत है!', 'success');
       
+      // Auto-navigate to dashboard once logged in (guard will handle terms)
+      navigate('/dashboard', { replace: true });
+      
     } catch (error) {
       console.error('[App] Login failed:', error);
       // Fallback
@@ -258,7 +255,6 @@ export default function App() {
         uid: 'u_' + phone,
         phone,
         role: 'finder',
-        roleChosen: false,
         loginExpiry,
         acceptedTerms: false,
         language: language || 'en',
@@ -319,44 +315,6 @@ export default function App() {
     }
   };
 
-  const handleRoleSelect = async (role: UserRole) => {
-    if (!user || isSwitchingRole) return;
-    
-    console.log('[App] Selecting role:', role);
-    setIsSwitchingRole(true);
-    
-    try {
-      const updates = { 
-        role, 
-        roleChosen: true,
-        // Auto-admin for specific phone
-        ...(user.phone === '9322646638' ? { role: 'admin' as UserRole } : {})
-      };
-      
-      await userService.updateProfile(user.uid, updates);
-      
-      const updatedUser = { ...user, ...updates };
-      setUser(updatedUser);
-      localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
-      
-      showToast(language === 'en' ? '✅ Role saved successfully' : '✅ भूमिका सुरक्षित हो गई');
-      
-      // Delay navigation slightly to let state propagate and show toast
-      setTimeout(() => {
-        setIsSwitchingRole(false);
-        setActiveTab(role === 'owner' || role === 'admin' ? 'add' : 'home');
-        // Navigation will be handled by the onboarding useEffect guard
-        console.log('[App] Role selection complete, navigating to dashboard...');
-        navigate('/dashboard', { replace: true });
-      }, 800);
-
-    } catch (error: any) {
-      setIsSwitchingRole(false);
-      console.error('[App] Role selection ERROR:', error);
-      showToast(language === 'en' ? 'Failed to save role.' : 'भूमिका सुरक्षित करने में विफल।', 'error');
-    }
-  };
-
   const isCityPaid = (city: string) => {
     if (user?.role === 'admin') return true;
     if (!user?.unlockedCities) return false;
@@ -366,36 +324,46 @@ export default function App() {
   };
 
   const handleAddListing = async (listing: Omit<Listing, 'id' | 'ownerUid'>) => {
-    const listingId = await listingService.createListing({
-      ...listing,
-      ownerUid: user?.uid || 'anonymous'
-    });
-    console.log('[App] Listing created with ID:', listingId);
-    
-    // Save new area if it doesn't exist in our merged list
-    const city = listing.city as City;
-    if (!areas[city].includes(listing.area)) {
-      console.log('[App] Auto-adding new area to Firestore:', listing.area);
+    try {
+      const listingId = await listingService.createListing({
+        ...listing,
+        ownerUid: user?.uid || 'anonymous'
+      });
+      console.log('[App] Listing created with ID:', listingId);
+      showToast(language === 'en' ? '✅ Listing published successfully!' : '✅ लिस्टिंग सफलतापूर्वक प्रकाशित हुई!', 'success');
       
-      // Optimistic update
-      const updatedAreas = {
-        ...areas,
-        [city]: [...areas[city], listing.area]
-      };
-      setAreas(updatedAreas);
+      // Save new area if it doesn't exist in our merged list
+      const city = listing.city as City;
+      if (!areas[city].includes(listing.area)) {
+        console.log('[App] Auto-adding new area to Firestore:', listing.area);
+        
+        // Optimistic update
+        const updatedAreas = {
+          ...areas,
+          [city]: [...areas[city], listing.area]
+        };
+        setAreas(updatedAreas);
 
-      try {
-        await areaService.addArea({
-          city,
-          areaName: listing.area,
-          createdBy: user?.uid || 'anonymous',
-          createdAt: new Date().toISOString()
-        });
-      } catch (err: any) {
-        if (err.message !== 'Area already exists in this city') {
-          console.error('[App] Failed to auto-save area:', err);
+        try {
+          await areaService.addArea({
+            city,
+            areaName: listing.area,
+            createdBy: user?.uid || 'anonymous',
+            createdAt: new Date().toISOString()
+          });
+          showToast(language === 'en' ? 'Area saved' : 'क्षेत्र सहेजा गया');
+        } catch (err: any) {
+          if (err.message !== 'Area already exists in this city') {
+            console.error('[App] Failed to auto-save area:', err);
+          }
         }
       }
+      
+      // Return to main view after adding
+      setHomeView('main');
+    } catch (error) {
+      console.error('[App] Failed to add listing:', error);
+      showToast('Failed to add listing', 'error');
     }
   };
 
@@ -443,101 +411,175 @@ export default function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'home':
-        if (!selectedLocation) {
+        if (homeView === 'main') {
           return (
-            <div className="space-y-6">
-              <div className="px-6 pt-6">
-                <div className="relative" onClick={() => setActiveTab('search')}>
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#697386]" />
-                  <input
-                    type="text"
-                    placeholder={t.search + "..."}
-                    readOnly
-                    className="w-full sleek-input pl-11 cursor-pointer"
-                  />
-                </div>
+            <div className="p-6 space-y-6 pt-12 animate-in fade-in duration-500">
+              <div className="text-center mb-8">
+                <h1 className="text-3xl font-extrabold text-[#1A1F36] mb-2">RoomEase</h1>
+                <p className="text-[#697386]">{translations[language || 'en'].welcome}</p>
               </div>
-              <CitySelector 
-                areas={areas}
-                language={language || 'en'}
-                onSelect={handleSelectLocation} 
+              
+              <div className="grid grid-cols-1 gap-6">
+                <button 
+                  onClick={() => setHomeView('finder')}
+                  className="sleek-card p-8 flex flex-col items-center justify-center space-y-4 hover:scale-[1.02] transition-transform active:scale-95 border-2 border-transparent hover:border-[#5469D4]/30"
+                >
+                  <div className="w-16 h-16 bg-[#5469D4]/10 rounded-3xl flex items-center justify-center">
+                    <Search className="w-8 h-8 text-[#5469D4]" />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-xl font-bold text-[#1A1F36]">{translations[language || 'en'].find_room}</h3>
+                    <p className="text-[#697386] text-sm mt-1">{language === 'en' ? 'Search verified rooms near you' : 'अपने आस-पास सत्यापित कमरे खोजें'}</p>
+                  </div>
+                </button>
+
+                <button 
+                  onClick={() => setHomeView('owner')}
+                  className="sleek-card p-8 flex flex-col items-center justify-center space-y-4 hover:scale-[1.02] transition-transform active:scale-95 border-2 border-transparent hover:border-[#33CC66]/30"
+                >
+                  <div className="w-16 h-16 bg-[#33CC66]/10 rounded-3xl flex items-center justify-center">
+                    <svg className="w-8 h-8 text-[#33CC66]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-xl font-bold text-[#1A1F36]">{translations[language || 'en'].list_room_role}</h3>
+                    <p className="text-[#697386] text-sm mt-1">{language === 'en' ? 'Post your room & find tenants' : 'अपना कमरा पोस्ट करें और किराएदार खोजें'}</p>
+                  </div>
+                </button>
+              </div>
+
+              {user?.role === 'admin' && (
+                <button 
+                  onClick={() => setActiveTab('admin')}
+                  className="w-full sleek-card p-4 text-center font-bold text-[#5469D4] border-dashed border-2 border-[#5469D4]/20"
+                >
+                  Admin Panel
+                </button>
+              )}
+            </div>
+          );
+        }
+
+        if (homeView === 'finder') {
+          if (!selectedLocation) {
+            return (
+              <div className="space-y-6">
+                <div className="px-6 pt-6 flex items-center space-x-4">
+                  <button onClick={() => setHomeView('main')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                    <svg className="w-6 h-6 text-[#1A1F36]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <div className="relative flex-1" onClick={() => setActiveTab('search')}>
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#697386]" />
+                    <input
+                      type="text"
+                      placeholder={t.search + "..."}
+                      readOnly
+                      className="w-full sleek-input pl-11 cursor-pointer"
+                    />
+                  </div>
+                </div>
+                <CitySelector 
+                  areas={areas}
+                  language={language || 'en'}
+                  onSelect={handleSelectLocation} 
+                />
+              </div>
+            );
+          }
+          return (
+            <ListingList
+              listings={listings.filter(l => l.city === selectedLocation.city && l.area === selectedLocation.area)}
+              isPaid={isCityPaid(selectedLocation.city)}
+              user={user}
+              city={selectedLocation.city}
+              area={selectedLocation.area}
+              language={language || 'en'}
+              onUnlock={() => {
+                setPaymentCity(selectedLocation.city);
+                setIsPaymentModalOpen(true);
+              }}
+              onChat={(listing) => {
+                if (isCityPaid(listing.city)) {
+                  setActiveChat({ id: 'chat_1', listingId: listing.id, participants: [user!.uid, listing.ownerUid], updatedAt: new Date().toISOString() });
+                } else {
+                  setPaymentCity(listing.city as City);
+                  setIsPaymentModalOpen(true);
+                }
+              }}
+              onBack={() => setSelectedLocation(null)}
+            />
+          );
+        }
+
+        if (homeView === 'owner') {
+          return (
+            <div className="pb-20">
+              <div className="px-6 pt-6 flex items-center space-x-4 mb-4">
+                <button onClick={() => setHomeView('main')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                  <svg className="w-6 h-6 text-[#1A1F36]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <h2 className="text-xl font-bold text-[#1A1F36]">{t.owner_panel}</h2>
+              </div>
+              <OwnerDashboard 
+                areas={areas} 
+                language={language || 'en'} 
+                onAddListing={handleAddListing} 
+                onDeleteListing={handleDeleteListing}
+                currentUserId={user?.uid || ''}
+                listings={listings.filter(l => l.ownerUid === user?.uid)}
               />
             </div>
           );
         }
-        return (
-          <ListingList
-            listings={listings.filter(l => l.city === selectedLocation.city && l.area === selectedLocation.area)}
-            isPaid={isCityPaid(selectedLocation.city)}
-            user={user}
-            city={selectedLocation.city}
-            area={selectedLocation.area}
-            language={language || 'en'}
-            onUnlock={() => {
-              setPaymentCity(selectedLocation.city);
-              setIsPaymentModalOpen(true);
-            }}
-            onChat={(listing) => {
-              if (isCityPaid(listing.city)) {
-                setActiveChat({ id: 'chat_1', listingId: listing.id, participants: [user!.uid, listing.ownerUid], updatedAt: new Date().toISOString() });
-              } else {
-                setPaymentCity(listing.city as City);
-                setIsPaymentModalOpen(true);
-              }
-            }}
-            onBack={() => setSelectedLocation(null)}
-          />
-        );
+        return null;
       case 'search':
         return (
-          <SearchTab 
-            listings={listings}
-            user={user!}
-            areas={areas}
-            isCityPaid={isCityPaid}
-            language={language || 'en'}
-            onUnlock={(city) => {
-              setPaymentCity(city as City);
-              setIsPaymentModalOpen(true);
-            }}
-            onChat={(listing) => {
-              if (isCityPaid(listing.city)) {
-                setActiveChat({ id: 'chat_1', listingId: listing.id, participants: [user!.uid, listing.ownerUid], updatedAt: new Date().toISOString() });
-              } else {
-                setPaymentCity(listing.city as City);
+          <div className="pb-20">
+            <div className="px-6 pt-6 flex items-center space-x-4 mb-2">
+              <button onClick={() => setActiveTab('home')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <svg className="w-6 h-6 text-[#1A1F36]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <h2 className="text-xl font-bold text-[#1A1F36]">{t.search}</h2>
+            </div>
+            <SearchTab 
+              listings={listings}
+              user={user!}
+              areas={areas}
+              isCityPaid={isCityPaid}
+              language={language || 'en'}
+              onUnlock={(city) => {
+                setPaymentCity(city as City);
                 setIsPaymentModalOpen(true);
-              }
-            }}
-          />
-        );
-      case 'add':
-        if (user?.role === 'owner' || user?.role === 'admin') {
-          return (
-            <OwnerDashboard 
-              areas={areas} 
-              language={language || 'en'} 
-              onAddListing={handleAddListing} 
-              onDeleteListing={handleDeleteListing}
-              currentUserId={user?.uid || ''}
-              listings={listings.filter(l => l.ownerUid === user?.uid)}
+              }}
+              onChat={(listing) => {
+                if (isCityPaid(listing.city)) {
+                  setActiveChat({ id: 'chat_1', listingId: listing.id, participants: [user!.uid, listing.ownerUid], updatedAt: new Date().toISOString() });
+                } else {
+                  setPaymentCity(listing.city as City);
+                  setIsPaymentModalOpen(true);
+                }
+              }}
             />
-          );
-        }
-        return (
-          <div className="p-6 text-center mt-20">
-            <p className="text-gray-500">{language === 'en' ? 'Only owners can list rooms.' : 'केवल मालिक ही कमरे सूचीबद्ध कर सकते हैं।'}</p>
-            <button 
-              onClick={() => navigate('/role-selection')}
-              className="mt-4 text-[#5469D4] font-bold"
-            >
-              {language === 'en' ? 'Switch to Owner Role' : 'मालिक भूमिका पर स्विच करें'}
-            </button>
           </div>
         );
       case 'chats':
         return (
-          <div className="p-6">
-            <h2 className="text-2xl font-bold mb-6">{t.chats}</h2>
+          <div className="p-6 pb-24">
+             <div className="flex items-center space-x-4 mb-6">
+                <button onClick={() => setActiveTab('home')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                  <svg className="w-6 h-6 text-[#1A1F36]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <h2 className="text-2xl font-bold">{t.chats}</h2>
+              </div>
             {!isPaid ? (
               <div className="sleek-card p-8 text-center">
                 <p className="text-[#697386] mb-6">
@@ -556,21 +598,40 @@ export default function App() {
         );
       case 'profile':
         return (
-          <div className="space-y-6">
+          <div className="space-y-6 pb-24">
+            <div className="px-6 pt-6 flex items-center space-x-4">
+              <button onClick={() => setActiveTab('home')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <svg className="w-6 h-6 text-[#1A1F36]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <h2 className="text-xl font-bold text-[#1A1F36]">{t.profile}</h2>
+            </div>
             <Profile 
               user={user!} 
               language={language || 'en'} 
               onLogout={handleLogout} 
-              onSwitchRole={() => navigate('/role-selection')}
             />
-            <div className="px-6 pb-24">
+            <div className="px-6">
               <ImageGenerator />
             </div>
           </div>
         );
       case 'admin':
         if (user?.role !== 'admin') return null;
-        return <AdminPanel />;
+        return (
+          <div className="pb-24">
+            <div className="px-6 pt-6 flex items-center space-x-4 mb-4">
+              <button onClick={() => setActiveTab('home')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <svg className="w-6 h-6 text-[#1A1F36]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <h2 className="text-xl font-bold text-[#1A1F36]">Admin Panel</h2>
+            </div>
+            <AdminPanel />
+          </div>
+        );
       default:
         return null;
     }
@@ -624,18 +685,7 @@ export default function App() {
             element={<Navigate to="/login" />} 
           />
 
-          <Route 
-            path="/role-selection" 
-            element={
-              !user ? <Navigate to="/login" /> : (
-                <RoleSelection 
-                  language={language || 'en'} 
-                  onSelect={handleRoleSelect} 
-                  loading={isSwitchingRole}
-                />
-              )
-            }
-          />
+
 
           <Route 
             path="/dashboard" 
@@ -644,7 +694,7 @@ export default function App() {
                 !user.acceptedTerms ? (
                   <TermsAndConditions onAccept={handleAcceptTerms} language={language || 'en'} />
                 ) : (
-                  <>
+                  <div className="pb-24">
                     {renderContent()}
                     <Navigation 
                       activeTab={activeTab} 
@@ -652,7 +702,7 @@ export default function App() {
                       role={user.role} 
                       language={language || 'en'}
                     />
-                  </>
+                  </div>
                 )
               )
             } 

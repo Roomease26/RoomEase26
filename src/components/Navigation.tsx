@@ -16,18 +16,10 @@ export default function Navigation({ activeTab, onTabChange, role, language }: P
   
   const tabs = [
     { id: 'home', icon: Home, label: t.home || 'Home' },
-  ];
-
-  if (role === 'owner') {
-    tabs.push({ id: 'add', icon: PlusCircle, label: t.list_room_role });
-  } else {
-    tabs.push({ id: 'search', icon: Search, label: t.search || 'Search' });
-  }
-
-  tabs.push(
+    { id: 'search', icon: Search, label: t.search || 'Search' },
     { id: 'chats', icon: MessageCircle, label: t.chats || 'Chats' },
-    { id: 'profile', icon: User, label: t.profile || 'Profile' }
-  );
+    { id: 'profile', icon: User, label: t.profile || 'Profile' },
+  ];
 
   if (role === 'admin') {
     tabs.push({ id: 'admin', icon: User, label: 'Admin' });

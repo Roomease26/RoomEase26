@@ -88,7 +88,6 @@ export const userService = {
         ...profile,
         uid,
         acceptedTerms: false,
-        roleChosen: false,
         role: profile.role || 'finder',
         createdAt: serverTimestamp(),
       });

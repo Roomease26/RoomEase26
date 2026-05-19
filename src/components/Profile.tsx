@@ -7,10 +7,9 @@ interface Props {
   user: UserProfile;
   language: Language;
   onLogout: () => void;
-  onSwitchRole: () => void;
 }
 
-export default function Profile({ user, language, onLogout, onSwitchRole }: Props) {
+export default function Profile({ user, language, onLogout }: Props) {
   const activeCities = Object.entries(user.unlockedCities || {}).filter(([_, expiry]) => new Date(expiry) > new Date());
   const isPaid = activeCities.length > 0 || user.role === 'admin';
   const t = translations[language];
@@ -24,13 +23,7 @@ export default function Profile({ user, language, onLogout, onSwitchRole }: Prop
           </div>
           <h1 className="text-2xl font-bold text-[#1A1F36]">{user.phone}</h1>
           <div className="flex flex-col items-center gap-2 mt-2">
-            <div className="sleek-tag">{t[user.role as keyof typeof t] || user.role}</div>
-            <button 
-              onClick={onSwitchRole}
-              className="text-[10px] font-bold text-[#5469D4] uppercase tracking-wider"
-            >
-              {language === 'en' ? 'Change Role' : language === 'hi' ? 'भूमिका बदलें' : 'भूमिका बदला'}
-            </button>
+            <div className="sleek-tag">{user.role === 'admin' ? 'Admin' : 'User'}</div>
           </div>
         </header>
 
