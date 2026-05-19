@@ -6,6 +6,7 @@ export interface UserProfile {
   uid: string;
   phone: string;
   role: UserRole;
+  roleChosen?: boolean;
   paymentExpiry?: string;
   loginExpiry: string;
   acceptedTerms?: boolean;

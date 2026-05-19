@@ -26,7 +26,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { Search } from 'lucide-react';
 import { translations } from './translations';
 import { userService, listingService, paymentService, areaService } from './services/dataService';
-import { isFirebaseConfigured } from './lib/firebase';
+import { db, auth, isFirebaseConfigured } from './lib/firebase';
+import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 
 export default function App() {
   const navigate = useNavigate();
@@ -36,6 +37,7 @@ export default function App() {
     return (saved as Language) || null;
   });
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('home');
   const [selectedLocation, setSelectedLocation] = useState<{ city: City; area: string } | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -46,6 +48,61 @@ export default function App() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
 
+  // Session Restoration & Auth Listener
+  useEffect(() => {
+    console.log('[App] Initializing session restoration...');
+    
+    // Fallback for manual session restore if Firebase takes too long or is unconfigured
+    const restoreManualSession = async () => {
+      const savedUser = localStorage.getItem('roomease_user');
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          if (new Date(parsed.loginExpiry) > new Date()) {
+            console.log('[App] Restored manual session for:', parsed.phone);
+            setUser(parsed);
+          } else {
+            localStorage.removeItem('roomease_user');
+          }
+        } catch (e) {
+          console.error('[App] Failed to parse saved session:', e);
+        }
+      }
+    };
+
+    if (!isFirebaseConfigured || !auth) {
+      restoreManualSession().finally(() => setIsInitialLoading(false));
+      return;
+    }
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      try {
+        if (firebaseUser) {
+          console.log('[App] Auth State Changed: USER FOUND', firebaseUser.uid);
+          const profile = await userService.getProfile(firebaseUser.uid);
+          if (profile) {
+            setUser(profile);
+            localStorage.setItem('roomease_user', JSON.stringify(profile));
+            console.log('[App] Profile restored from Firestore');
+          } else {
+            // This might happen if user is authed but has no profile yet
+            await restoreManualSession();
+          }
+        } else {
+          console.log('[App] Auth State Changed: NO USER');
+          await restoreManualSession();
+        }
+      } catch (err) {
+        console.error('[App] Restoration error:', err);
+        await restoreManualSession();
+      } finally {
+        setIsInitialLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   // Sync language selection to localStorage
   useEffect(() => {
     if (language) {
@@ -55,12 +112,14 @@ export default function App() {
 
   // Listen to Listings
   useEffect(() => {
+    if (isInitialLoading) return;
     const unsubscribe = listingService.listenToListings(setListings);
     return () => unsubscribe();
-  }, []);
+  }, [isInitialLoading]);
 
   // Listen to Areas
   useEffect(() => {
+    if (isInitialLoading) return;
     const unsubscribe = areaService.listenToAreas((fetchedAreas) => {
       setRawAreas(fetchedAreas);
       // Create a fresh copy of INITIAL_AREAS
@@ -72,68 +131,61 @@ export default function App() {
       fetchedAreas.forEach(a => {
         if (mergedAreas[a.city] && !mergedAreas[a.city].includes(a.areaName)) {
           mergedAreas[a.city] = [...mergedAreas[a.city], a.areaName];
-        } else if (!mergedAreas[a.city]) {
-          console.warn('[App] Area city not found in CITIES:', a.city);
         }
       });
       setAreas(mergedAreas);
       localStorage.setItem('roomease_areas', JSON.stringify(mergedAreas));
     });
     return () => unsubscribe();
-  }, []);
+  }, [isInitialLoading]);
 
-  // Listen to Profile if user is logged in
+  // Handle Onboarding Flow & Redirects
   useEffect(() => {
-    if (user?.uid) {
-      const unsubscribe = userService.listenToProfile(user.uid, (profile) => {
-        if (profile) {
-          setUser(profile);
-          localStorage.setItem('roomease_user', JSON.stringify(profile));
-        }
-      });
-      return () => unsubscribe();
-    }
-  }, [user?.uid]);
+    if (isInitialLoading) return;
 
-  // Update selected city and last active time
-  useEffect(() => {
-    if (user?.uid && selectedLocation?.city) {
-      if (user.selectedCity !== selectedLocation.city) {
-        userService.updateProfile(user.uid, {
-          selectedCity: selectedLocation.city,
-          lastActive: new Date().toISOString()
-        }).catch(err => console.error('[App] Update location error:', err));
+    const path = location.pathname;
+
+    // 1. Not Logged In
+    if (!user) {
+      if (path !== '/login' && path !== '/verify') {
+        console.log('[App] Guard: Redirecting to login');
+        navigate('/login', { replace: true });
       }
+      return;
     }
-  }, [selectedLocation?.city, user?.uid]);
 
-  // Handle high-level redirects
-  useEffect(() => {
-    console.log('[App] Route changed:', location.pathname);
-    if (!language && location.pathname !== '/') {
-      navigate('/');
-    } else if (language && !user && !['/login', '/verify', '/'].includes(location.pathname)) {
-      navigate('/login');
-    }
-  }, [language, user, location.pathname, navigate]);
-
-  // Load session from localStorage
-  useEffect(() => {
-    const savedUser = localStorage.getItem('roomease_user');
-    if (savedUser) {
-      const parsed = JSON.parse(savedUser);
-      if (new Date(parsed.loginExpiry) > new Date()) {
-        setUser(parsed);
-      } else {
-        localStorage.removeItem('roomease_user');
+    // 2. Language Selection
+    if (!language) {
+      if (path !== '/') {
+        console.log('[App] Guard: Redirecting to language selection');
+        navigate('/', { replace: true });
       }
+      return;
     }
 
-    const savedAreas = localStorage.getItem('roomease_areas');
-    if (savedAreas) {
-      setAreas(JSON.parse(savedAreas));
+    // 3. Terms & Conditions
+    if (!user.acceptedTerms) {
+      if (path !== '/dashboard') { // Dashboard handles Terms UI globally or we could have a route
+         // Current App structure shows Terms inside /dashboard if !acceptedTerms
+         if (path !== '/dashboard') navigate('/dashboard', { replace: true });
+      }
+      return;
     }
-  }, []);
+
+    // 4. Role Selection
+    if (!user.roleChosen) {
+      if (path !== '/role-selection') {
+        console.log('[App] Guard: Redirecting to role selection');
+        navigate('/role-selection', { replace: true });
+      }
+      return;
+    }
+
+    // 5. Normal Dashboard (Redirect if on onboarding pages but everything is ready)
+    if (['/login', '/verify', '/'].includes(path) && language && user.acceptedTerms && user.roleChosen) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [user, language, isInitialLoading, location.pathname, navigate]);
 
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -145,16 +197,31 @@ export default function App() {
 
   const handleLogin = async (phone: string) => {
     try {
-      const uid = 'u_' + phone; 
-      let profile = await userService.getProfile(uid);
+      console.log('[App] Handling login for:', phone);
+      // 1. Authenticate with Firebase if configured
+      let uid = 'u_' + phone; // Fallback
+      if (isFirebaseConfigured && auth) {
+        try {
+          const authCredential = await signInAnonymously(auth);
+          uid = authCredential.user.uid;
+          console.log('[App] Firebase Anonymous Auth Success:', uid);
+        } catch (authErr) {
+          console.warn('[App] Auth failed, continuing with manual UID:', authErr);
+        }
+      }
+
+      // 2. Try to find profile by phone first
+      let profile = await userService.getProfileByPhone(phone);
       const now = new Date().toISOString();
       const loginExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
       
       if (!profile) {
+        console.log('[App] Creating new profile for:', phone);
         const newUser: UserProfile = {
           uid,
           phone,
-          role: phone === '9322646638' ? 'admin' : 'finder', // Default but will prompt
+          role: 'finder',
+          roleChosen: false, 
           loginExpiry,
           acceptedTerms: false,
           language: language || 'en',
@@ -168,34 +235,30 @@ export default function App() {
         await userService.createProfile(uid, newUser);
         profile = newUser;
       } else {
-        // Requirement: If user already exists, update last login time only
+        console.log('[App] Updating existing profile for:', phone);
         const updates: Partial<UserProfile> = {
+          uid, 
           loginTime: now,
-          lastActive: now
+          lastActive: now,
+          loginExpiry
         };
-        await userService.updateProfile(uid, updates);
+        await userService.updateProfile(profile.uid, updates);
         profile = { ...profile, ...updates };
       }
 
       setUser(profile);
       localStorage.setItem('roomease_user', JSON.stringify(profile));
+      showToast(language === 'en' ? 'Welcome back!' : 'वापसी पर स्वागत है!', 'success');
       
-      // If no role set (for some reason) or it's a first time, role selection might be needed.
-      // But we set a default role above. We'll check if they need to CHOOSE.
-      if (!profile.role || profile.role === 'finder') {
-        // We'll let them choose anyway on first login if we want to be explicit
-        navigate('/role-selection');
-      } else {
-        navigate('/dashboard');
-      }
     } catch (error) {
       console.error('[App] Login failed:', error);
-      // Fallback for demo when Firebase is not configured
+      // Fallback
       const loginExpiry = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
       const mockUser: UserProfile = {
         uid: 'u_' + phone,
         phone,
-        role: phone === '9322646638' ? 'admin' : 'finder',
+        role: 'finder',
+        roleChosen: false,
         loginExpiry,
         acceptedTerms: false,
         language: language || 'en',
@@ -203,6 +266,7 @@ export default function App() {
       };
       setUser(mockUser);
       localStorage.setItem('roomease_user', JSON.stringify(mockUser));
+      showToast('Offline login successful', 'success');
     }
   };
 
@@ -213,8 +277,10 @@ export default function App() {
         setUser(updatedUser);
         localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
         await userService.updateProfile(user.uid, { acceptedTerms: true });
+        showToast(language === 'en' ? 'Terms accepted' : 'नियम स्वीकार किए गए');
       } catch (error) {
         console.error('[App] Failed to update terms:', error);
+        showToast('Failed to save terms', 'error');
       }
     }
   };
@@ -256,50 +322,38 @@ export default function App() {
   const handleRoleSelect = async (role: UserRole) => {
     if (!user || isSwitchingRole) return;
     
-    console.log('[App] Starting Role switch to:', role);
+    console.log('[App] Selecting role:', role);
     setIsSwitchingRole(true);
     
-    // Safety timeout to prevent stuck spinner
-    const timeout = setTimeout(() => {
-      if (isSwitchingRole) {
-        setIsSwitchingRole(false);
-        console.error('[App] Role switch TIMEOUT');
-        showToast(language === 'en' ? 'Update taking too long. Please try again.' : 'अपडेट में बहुत समय लग रहा है।', 'error');
-      }
-    }, 8000);
-
     try {
-      // 1. Instant update in Firestore
-      await userService.updateProfile(user.uid, { role });
-      clearTimeout(timeout);
-      console.log('[App] Firestore update SUCCESS');
-
-      // 2. Update local state immediately
-      const updatedUser = { ...user, role };
+      const updates = { 
+        role, 
+        roleChosen: true,
+        // Auto-admin for specific phone
+        ...(user.phone === '9322646638' ? { role: 'admin' as UserRole } : {})
+      };
+      
+      await userService.updateProfile(user.uid, updates);
+      
+      const updatedUser = { ...user, ...updates };
       setUser(updatedUser);
       localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
       
-      // 3. Success Feedback & Navigation
-      const successMsg = language === 'en' ? '✅ Role switched successfully' : '✅ भूमिका सफलतापूर्वक बदली गई';
-      showToast(successMsg, 'success');
+      showToast(language === 'en' ? '✅ Role saved successfully' : '✅ भूमिका सुरक्षित हो गई');
       
+      // Delay navigation slightly to let state propagate and show toast
       setTimeout(() => {
         setIsSwitchingRole(false);
-        // Instant dashboard navigation
-        if (role === 'owner' || role === 'admin') {
-          setActiveTab('add');
-        } else {
-          setActiveTab('home');
-        }
+        setActiveTab(role === 'owner' || role === 'admin' ? 'add' : 'home');
+        // Navigation will be handled by the onboarding useEffect guard
+        console.log('[App] Role selection complete, navigating to dashboard...');
         navigate('/dashboard', { replace: true });
-        console.log('[App] Role switch COMPLETE');
-      }, 500);
+      }, 800);
 
     } catch (error: any) {
-      clearTimeout(timeout);
       setIsSwitchingRole(false);
-      console.error('[App] Role switch ERROR:', error);
-      showToast(language === 'en' ? 'Failed to switch role. Check connection.' : 'भूमिका बदलने में विफल। कनेक्शन जांचें।', 'error');
+      console.error('[App] Role selection ERROR:', error);
+      showToast(language === 'en' ? 'Failed to save role.' : 'भूमिका सुरक्षित करने में विफल।', 'error');
     }
   };
 
@@ -522,6 +576,16 @@ export default function App() {
     }
   };
 
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen bg-[#F7F9FC] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 border-4 border-[#5469D4]/20 border-t-[#5469D4] rounded-full animate-spin mb-6"></div>
+        <h2 className="text-xl font-bold text-[#1A1F36] mb-2 tracking-tight">RoomEase</h2>
+        <p className="text-[#697386] text-sm animate-pulse">Restoring session...</p>
+      </div>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#F7F9FC]">
@@ -532,16 +596,10 @@ export default function App() {
             {toast.message}
           </div>
         )}
-        {!isFirebaseConfigured && (
-          <div className="bg-rose-500 text-white p-4 text-center font-bold text-sm shadow-lg sticky top-0 z-[100] animate-in slide-in-from-top duration-300">
-            ⚠️ Firebase is not configured properly. Some features may not work. 
-            Check your environment variables (VITE_FIREBASE_API_KEY, etc.)
-          </div>
-        )}
         <Routes>
           <Route 
             path="/" 
-            element={!language ? <LanguageSelector onSelect={setLanguage} /> : <Navigate to="/login" />} 
+            element={language ? <Navigate to="/dashboard" /> : <LanguageSelector onSelect={setLanguage} />} 
           />
           
           <Route 
@@ -563,19 +621,7 @@ export default function App() {
 
           <Route 
             path="/verify" 
-            element={
-              user ? <Navigate to="/dashboard" /> : (
-                <div className="min-h-screen bg-[#E5E9F0]">
-                  <div className="p-6 bg-[#5469D4] text-white text-center py-12 rounded-b-[40px] shadow-lg">
-                    <h1 className="text-3xl font-extrabold mb-4">RoomEase</h1>
-                    <p className="text-blue-100 text-sm max-w-xs mx-auto">
-                      {t.welcome}
-                    </p>
-                  </div>
-                  <Login onLogin={handleLogin} language={language || 'en'} />
-                </div>
-              )
-            } 
+            element={<Navigate to="/login" />} 
           />
 
           <Route 

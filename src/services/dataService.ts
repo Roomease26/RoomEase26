@@ -21,15 +21,17 @@ import { UserProfile, Listing, Message, Chat, Area, UserRole } from '../types';
 const handleFirestoreError = (error: any, operation: string, path: string | null) => {
   const errInfo = {
     error: error instanceof Error ? error.message : String(error),
-    operation,
+    operationType: operation,
     path,
     authInfo: {
       userId: auth?.currentUser?.uid,
       email: auth?.currentUser?.email,
+      emailVerified: auth?.currentUser?.emailVerified,
+      isAnonymous: auth?.currentUser?.isAnonymous
     }
   };
   console.error('Firestore Error:', JSON.stringify(errInfo));
-  // Don't re-throw, just let the caller handle null/[]
+  throw new Error(JSON.stringify(errInfo));
 };
 
 const checkConfig = () => {
@@ -39,16 +41,43 @@ const checkConfig = () => {
 };
 
 export const userService = {
-  async getProfile(uid: string): Promise<UserProfile | null> {
+  async getProfileByPhone(phone: string): Promise<UserProfile | null> {
+    try {
+      checkConfig();
+      const q = query(collection(db, 'users'), where('phone', '==', phone));
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) return null;
+      return querySnapshot.docs[0].data() as UserProfile;
+    } catch (error) {
+      handleFirestoreError(error, 'query', 'users(phone)');
+      return null;
+    }
+  },
+
+  async getProfileByUid(uid: string): Promise<UserProfile | null> {
     try {
       checkConfig();
       const docRef = doc(db, 'users', uid);
       const docSnap = await getDoc(docRef);
-      return docSnap.exists() ? (docSnap.data() as UserProfile) : null;
+      if (docSnap.exists()) return docSnap.data() as UserProfile;
+      
+      // Fallback: search by uid field if docId is not uid
+      const q = query(collection(db, 'users'), where('uid', '==', uid));
+      const qSnap = await getDocs(q);
+      return qSnap.empty ? null : (qSnap.docs[0].data() as UserProfile);
     } catch (error) {
       handleFirestoreError(error, 'get', `users/${uid}`);
       return null;
     }
+  },
+
+  async getProfile(uidOrPhone: string): Promise<UserProfile | null> {
+    // Attempt doc fetch first
+    let profile = await this.getProfileByUid(uidOrPhone);
+    if (!profile && uidOrPhone.length >= 10) {
+      profile = await this.getProfileByPhone(uidOrPhone);
+    }
+    return profile;
   },
 
   async createProfile(uid: string, profile: Partial<UserProfile>): Promise<void> {
@@ -59,6 +88,7 @@ export const userService = {
         ...profile,
         uid,
         acceptedTerms: false,
+        roleChosen: false,
         role: profile.role || 'finder',
         createdAt: serverTimestamp(),
       });
@@ -83,7 +113,6 @@ export const userService = {
 
   listenToProfile(uid: string, callback: (profile: UserProfile | null) => void) {
     if (!isFirebaseConfigured || !db) {
-      console.warn('[Firebase] Profile listener skipped: Firebase not configured');
       return () => {};
     }
     try {
@@ -180,7 +209,6 @@ export const listingService = {
 
   listenToListings(callback: (listings: Listing[]) => void) {
     if (!isFirebaseConfigured || !db) {
-      console.warn('[Firebase] Listings listener skipped: Firebase not configured');
       return () => {};
     }
     try {

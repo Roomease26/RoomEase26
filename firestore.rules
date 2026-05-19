@@ -32,8 +32,11 @@ service cloud.firestore {
     // ENTITY VALIDATORS
     // -------------------------------------------------------------------------
     function isValidUser(data) {
-      return data.phone is string && data.phone.size() <= 15 &&
-             data.role in ['user', 'admin'] &&
+      return data.uid == request.auth.uid &&
+             data.phone is string && data.phone.size() <= 15 &&
+             data.role in ['finder', 'owner', 'admin'] &&
+             (data.roleChosen == null || data.roleChosen is bool) &&
+             (data.acceptedTerms == null || data.acceptedTerms is bool) &&
              (data.loginExpiry == null || data.loginExpiry is string) &&
              (data.paymentExpiry == null || data.paymentExpiry is string) &&
              (data.language == null || data.language is string) &&
@@ -42,32 +45,32 @@ service cloud.firestore {
              (data.selectedCity == null || data.selectedCity is string) &&
              (data.subscriptionStatus == null || data.subscriptionStatus in ['active', 'expired', 'none']) &&
              (data.subscriptionActive == null || data.subscriptionActive is bool) &&
-             (data.expiryDate == null || data.expiryDate is string) &&
-             (data.acceptedTerms == null || data.acceptedTerms is bool) &&
-             (data.uid == null || data.uid is string);
+             (data.expiryDate == null || data.expiryDate is string);
     }
 
     function isValidListing(data) {
       return data.city is string && data.city.size() <= 100 &&
              data.area is string && data.area.size() <= 100 &&
              data.address is string && data.address.size() <= 500 &&
+             data.ownerUid == request.auth.uid &&
              data.createdAt is string;
     }
 
     function isValidChat(data) {
       return data.listingId is string &&
              data.participants is list &&
-             data.participants.size() == 2;
+             data.participants.size() == 2 &&
+             request.auth.uid in data.participants;
     }
 
     function isValidMessage(data) {
       return data.text is string && data.text.size() <= 2000 &&
-             data.senderUid is string &&
+             data.senderUid == request.auth.uid &&
              data.createdAt is string;
     }
 
     function isValidPayment(data) {
-      return data.userId is string &&
+      return data.userId == request.auth.uid &&
              data.amount is number &&
              data.status is string &&
              data.createdAt is string;
@@ -85,34 +88,49 @@ service cloud.firestore {
     // Admins Collection
     match /admins/{userId} {
       allow read: if isSignedIn();
-      allow write: if false; // Only manageable via console or service account
+      allow write: if false; 
     }
 
     // Users Collection
-    match /Users/{userId} {
-      allow read: if true; // Allow reading user profiles for chat/identification
-      allow create: if true; // Allow registration
-      allow update: if true; // Allow updates (could be more restrictive but keeping it simple for prototype)
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(incoming()) && 
+                    // Prevent common users from making themselves admins via role field
+                    (isAdmin() || incoming().role == existing().role || existing().role != 'admin');
     }
 
     // Listings Collection
     match /listings/{listingId} {
-      allow read: if true; // Public access to listings
-      allow create, update, delete: if true; // Keeping it simple for prototype
+      allow read: if true; 
+      allow create: if isSignedIn() && isValidListing(incoming());
+      allow update: if isSignedIn() && (existing().ownerUid == request.auth.uid || isAdmin()) && isValidListing(incoming());
+      allow delete: if isSignedIn() && (existing().ownerUid == request.auth.uid || isAdmin());
     }
 
     // Chats Collection
     match /chats/{chatId} {
-      allow read, create, update: if true;
+      allow read: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow create: if isSignedIn() && isValidChat(incoming());
+      allow update: if isSignedIn() && request.auth.uid in existing().participants && isValidChat(incoming());
       
       match /messages/{messageId} {
-        allow read, create: if true;
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants && isValidMessage(incoming());
       }
     }
 
     // Payments Collection
     match /payments/{paymentId} {
-      allow read, create: if true;
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidPayment(incoming());
+      allow update, delete: if isAdmin();
+    }
+
+    // Areas Collection
+    match /areas/{areaId} {
+      allow read: if true;
+      allow create: if isSignedIn(); // Allow contributors
       allow update, delete: if isAdmin();
     }
   }
