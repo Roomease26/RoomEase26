@@ -72,11 +72,12 @@ export const userService = {
     try {
       checkConfig();
       const docRef = doc(db, 'users', uid);
-      await updateDoc(docRef, updates);
+      // Use setDoc with merge instead of updateDoc for better reliability
+      await setDoc(docRef, updates, { merge: true });
       console.log('[Users] Profile updated in Firestore for:', uid);
     } catch (error) {
       handleFirestoreError(error, 'update', `users/${uid}`);
-      throw error; // RE-THROW so caller knows it failed
+      throw error;
     }
   },
 

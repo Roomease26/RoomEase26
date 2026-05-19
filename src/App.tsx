@@ -136,6 +136,12 @@ export default function App() {
   }, []);
 
   const [isSwitchingRole, setIsSwitchingRole] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
   const handleLogin = async (phone: string) => {
     try {
@@ -250,60 +256,50 @@ export default function App() {
   const handleRoleSelect = async (role: UserRole) => {
     if (!user || isSwitchingRole) return;
     
-    let timeoutId: any;
+    console.log('[App] Starting Role switch to:', role);
+    setIsSwitchingRole(true);
+    
+    // Safety timeout to prevent stuck spinner
+    const timeout = setTimeout(() => {
+      if (isSwitchingRole) {
+        setIsSwitchingRole(false);
+        console.error('[App] Role switch TIMEOUT');
+        showToast(language === 'en' ? 'Update taking too long. Please try again.' : 'अपडेट में बहुत समय लग रहा है।', 'error');
+      }
+    }, 8000);
+
     try {
-      console.log('[App] Role switch process started for:', role);
-      setIsSwitchingRole(true);
+      // 1. Instant update in Firestore
+      await userService.updateProfile(user.uid, { role });
+      clearTimeout(timeout);
+      console.log('[App] Firestore update SUCCESS');
+
+      // 2. Update local state immediately
+      const updatedUser = { ...user, role };
+      setUser(updatedUser);
+      localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
       
-      // Safety timeout - 8 seconds
-      const timeoutPromise = new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error('TIMEOUT')), 8000);
-      });
-
-      // Role update to Firestore
-      const updatePromise = (async () => {
-        await userService.updateProfile(user.uid, { role });
-        console.log('[App] Firestore role update complete');
-        
-        // Update local state
-        const updatedUser = { ...user, role };
-        setUser(updatedUser);
-        localStorage.setItem('roomease_user', JSON.stringify(updatedUser));
-        return true;
-      })();
-
-      // Race against timeout
-      await Promise.race([updatePromise, timeoutPromise]);
-      clearTimeout(timeoutId);
-
-      console.log('[App] Role switch successful. Navigating...');
-      
-      // Success feedback
+      // 3. Success Feedback & Navigation
       const successMsg = language === 'en' ? '✅ Role switched successfully' : '✅ भूमिका सफलतापूर्वक बदली गई';
+      showToast(successMsg, 'success');
       
-      // Brief delay for UX
       setTimeout(() => {
         setIsSwitchingRole(false);
-        // Navigate based on role
+        // Instant dashboard navigation
         if (role === 'owner' || role === 'admin') {
           setActiveTab('add');
         } else {
           setActiveTab('home');
         }
         navigate('/dashboard', { replace: true });
-        console.log('[App] Navigation to dashboard complete');
+        console.log('[App] Role switch COMPLETE');
       }, 500);
 
     } catch (error: any) {
-      clearTimeout(timeoutId);
-      console.error('[App] Role switch failed:', error);
+      clearTimeout(timeout);
       setIsSwitchingRole(false);
-      
-      const errorMsg = error.message === 'TIMEOUT' 
-        ? (language === 'en' ? 'Update taking too long. Please try again.' : 'अपडेट में बहुत समय लग रहा है। कृपया पुनः प्रयास करें।')
-        : (language === 'en' ? 'Failed to switch role. Check connection.' : 'भूमिका बदलने में विफल। कनेक्शन जांचें।');
-      
-      alert(errorMsg);
+      console.error('[App] Role switch ERROR:', error);
+      showToast(language === 'en' ? 'Failed to switch role. Check connection.' : 'भूमिका बदलने में विफल। कनेक्शन जांचें।', 'error');
     }
   };
 
@@ -529,6 +525,13 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#F7F9FC]">
+        {toast && (
+          <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-2xl shadow-xl text-white font-bold text-sm animate-in fade-in slide-in-from-top-4 duration-300 ${
+            toast.type === 'success' ? 'bg-[#33CC66]' : 'bg-red-500'
+          }`}>
+            {toast.message}
+          </div>
+        )}
         {!isFirebaseConfigured && (
           <div className="bg-rose-500 text-white p-4 text-center font-bold text-sm shadow-lg sticky top-0 z-[100] animate-in slide-in-from-top duration-300">
             ⚠️ Firebase is not configured properly. Some features may not work. 
