@@ -140,27 +140,24 @@ export const userService = {
 };
 
 export const areaService = {
-  async addArea(area: Omit<Area, 'id'>): Promise<string> {
+  async addArea(area: any): Promise<string> {
     try {
       checkConfig();
-      // Check for duplicates
-      const q = query(
-        collection(db, 'areas'), 
-        where('city', '==', area.city), 
-        where('areaName', '==', area.areaName)
-      );
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) {
-        throw new Error('Area already exists in this city');
-      }
-
+      // 9. Add console logs: area save started
+      console.log('area save started', { city: area.city, areaName: area.areaName });
+      
       const docRef = await addDoc(collection(db, 'areas'), {
-        ...area,
+        city: area.city,
+        areaName: area.areaName,
         createdAt: new Date().toISOString()
       });
-      console.log('[Areas] New area added:', area.areaName);
+      
+      // 9. Add console logs: area save success
+      console.log('area save success', { id: docRef.id, city: area.city, areaName: area.areaName });
       return docRef.id;
     } catch (error) {
+      // 9. Add console logs: firestore save failed
+      console.error('firestore save failed', error);
       handleFirestoreError(error, 'write', 'areas');
       throw error;
     }

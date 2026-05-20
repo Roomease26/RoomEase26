@@ -32,16 +32,30 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [showAreaSuccessPopup, setShowAreaSuccessPopup] = useState(false);
+  const [showAreaErrorPopup, setShowAreaErrorPopup] = useState(false);
+  const [areaErrorMessage, setAreaErrorMessage] = useState('');
   const [customArea, setCustomArea] = useState('');
   const [isCustomArea, setIsCustomArea] = useState(false);
   const [areaError, setAreaError] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  
+  // Custom session areas state to instantly bypass Firestore onSnapshot lag
+  const [localAddedAreas, setLocalAddedAreas] = useState<Record<City, string[]>>({} as any);
 
   const t = translations[language];
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  const getCityAreas = () => {
+    const fromProps = areas[city] || [];
+    const fromLocal = localAddedAreas[city] || [];
+    // Combine and keep unique
+    const combined = Array.from(new Set([...fromProps, ...fromLocal]));
+    return combined;
   };
 
   const formatAreaName = (name: string) => {
@@ -55,9 +69,32 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
   };
 
   const validateAreaName = (name: string) => {
-    if (name.length < 3) return t.area_name_hint || 'Minimum 3 characters';
-    if (name.length > 40) return 'Maximum 40 characters';
-    if (/[@!$#%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(name)) return t.invalid_area || 'Special characters not allowed';
+    const trimmed = name.trim();
+    if (trimmed.length < 3) return language === 'en' ? 'Minimum 3 characters required' : 'कम से कम 3 वर्ण आवश्यक हैं';
+    if (trimmed.length > 40) return language === 'en' ? 'Maximum 40 characters allowed' : 'अधिकतम 40 वर्णों की अनुमति है';
+    
+    // Check for special characters
+    if (/[@!$#%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(trimmed)) {
+      return language === 'en' ? 'Special characters not allowed' : 'विशेष वर्णों की अनुमति नहीं है';
+    }
+    
+    // Check for URLs
+    if (/\b(https?:\/\/[^\s]+|www\.[^\s]+|\w+\.(com|net|org|in|co|info|biz|io|xyz))\b/i.test(trimmed)) {
+      return language === 'en' ? 'URLs are not allowed as area names' : 'क्षेत्र के नाम के रूप में यूआरएल की अनुमति नहीं है';
+    }
+    
+    // Check for repetitive sequences (e.g., "aaaa" or "1111")
+    if (/(.)\1{3,}/.test(trimmed)) {
+      return language === 'en' ? 'Repetitive spam text is not allowed' : 'बार-बार आने वाले स्पैम पाठ की अनुमति नहीं है';
+    }
+
+    // Check for other obvious spam keywords
+    const spamKeywords = ['test', 'fake', 'viagra', 'spam', 'casino', 'betting', 'earn money', 'free room'];
+    const hasSpamKeyword = spamKeywords.some(keyword => trimmed.toLowerCase().includes(keyword));
+    if (hasSpamKeyword) {
+      return language === 'en' ? 'Inappropriate or spam text detected' : 'अनुचित या स्पैम पाठ का पता चला';
+    }
+
     return '';
   };
 
@@ -90,22 +127,70 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
 
     try {
       setLoading(true);
-      console.log('[OwnerDashboard] Adding new area:', formatted, 'to city:', city);
+      console.log('area save started');
+      
       await areaService.addArea({
         city,
         areaName: formatted,
-        createdBy: currentUserId,
+        createdBy: currentUserId || 'anonymous',
         createdAt: new Date().toISOString()
       });
-      setArea(formatted);
+      
+      console.log('firestore success');
+
+      // Save to local added areas to instantly update option list in drop-down
+      setLocalAddedAreas(prev => ({
+        ...prev,
+        [city]: [...(prev[city] || []), formatted]
+      }));
+
+      // After successful save:
+      // - instantly close popup
       setShowAreaModal(false);
+      console.log('popup closed');
+
+      // - auto-select newly added area
+      setArea(formatted);
       setCustomArea('');
-      setLoading(false);
-      showToast(language === 'en' ? 'Area added successfully!' : 'क्षेत्र सफलतापूर्वक जोड़ा गया!');
+      
+      // show success toast:
+      const successMessage = language === 'en' ? '✅ Area added successfully' : '✅ क्षेत्र सफलतापूर्वक जोड़ा गया';
+      showToast(successMessage, 'success');
+
+      // Show success popup modal for area
+      setShowAreaSuccessPopup(true);
+      setTimeout(() => {
+        setShowAreaSuccessPopup(false);
+      }, 2000);
+
     } catch (err: any) {
-      console.error('[OwnerDashboard] Failed to add area:', err);
-      setAreaError(err.message === 'Area already exists in this city' ? (t.duplicate_area || 'Area already exists') : err.message);
+      console.error('firestore save failed', err);
+      
+      let errMsg = 'Failed to save area.';
+      try {
+        if (err.message) {
+          if (err.message.startsWith('{')) {
+            const parsed = JSON.parse(err.message);
+            errMsg = parsed.error || errMsg;
+          } else {
+            errMsg = err.message;
+          }
+        }
+      } catch (parseErr) {
+        errMsg = err.message;
+      }
+      
+      if (errMsg.includes('Area already exists')) {
+        errMsg = t.duplicate_area || 'Area already exists in this city';
+      }
+
+      setAreaError(errMsg);
+      setAreaErrorMessage(errMsg);
+      setShowAreaErrorPopup(true);
+    } finally {
+      // Always stop loading using finally
       setLoading(false);
+      console.log('loading stopped');
     }
   };
 
@@ -199,6 +284,54 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
                 <div className="w-3 h-3 border-2 border-[#33CC66] border-t-transparent rounded-full animate-spin"></div>
                 Redirecting...
               </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Custom Area Success Popup */}
+        {showAreaSuccessPopup && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+            <motion.div 
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-[32px] p-8 text-center shadow-2xl max-w-xs w-full"
+            >
+              <div className="w-20 h-20 bg-[#33CC66] rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-100 animate-bounce">
+                <Check className="w-10 h-10 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-[#1A1F36] mb-2 uppercase tracking-wide">
+                {language === 'en' ? 'Success!' : 'सफल!'}
+              </h2>
+              <p className="text-[#697386] font-medium leading-relaxed">
+                ✅ {language === 'en' ? 'Area added successfully' : 'क्षेत्र सफलतापूर्वक जोड़ा गया'}
+              </p>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Custom Area Error Popup */}
+        {showAreaErrorPopup && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+            <motion.div 
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-white rounded-[32px] p-8 text-center shadow-2xl max-w-xs w-full"
+            >
+              <div className="w-20 h-20 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-red-50">
+                <AlertCircle className="w-10 h-10" />
+              </div>
+              <h2 className="text-xl font-bold text-[#1A1F36] mb-2 uppercase tracking-wide">
+                {language === 'en' ? 'Error' : 'त्रुटि!'}
+              </h2>
+              <p className="text-[#697386] font-medium leading-relaxed mb-6">
+                {areaErrorMessage}
+              </p>
+              <button
+                onClick={() => setShowAreaErrorPopup(false)}
+                className="w-full bg-[#1A1F36] text-white font-bold py-3 px-6 rounded-2xl hover:bg-black transition-colors"
+              >
+                {language === 'en' ? 'Close' : 'बंद करें'}
+              </button>
             </motion.div>
           </div>
         )}
@@ -301,7 +434,12 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
                         onChange={(e) => {
                           const newCity = e.target.value as City;
                           setCity(newCity);
-                          setArea(areas[newCity]?.[0] || '');
+                          // Clear search when switching cities
+                          setSearchArea('');
+                          const cityAreas = areas[newCity] || [];
+                          const localAreas = localAddedAreas[newCity] || [];
+                          const combined = Array.from(new Set([...cityAreas, ...localAreas]));
+                          setArea(combined[0] || '');
                         }}
                         className="w-full sleek-input"
                       >
@@ -330,14 +468,18 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
                           }}
                           className="w-full sleek-input"
                         >
-                          {(areas[city] || [])
+                          {getCityAreas()
                             .filter(a => a.toLowerCase().includes(searchArea.toLowerCase()))
                             .map(a => <option key={a} value={a}>{a}</option>)}
                           <option value="custom">+ {t.add_area}</option>
                         </select>
                         <button 
                           type="button"
-                          onClick={() => setShowAreaModal(true)}
+                          onClick={() => {
+                            setCustomArea('');
+                            setAreaError('');
+                            setShowAreaModal(true);
+                          }}
                           className="text-[10px] font-bold text-[#5469D4] uppercase text-left hover:underline"
                         >
                           {t.area_not_found}
