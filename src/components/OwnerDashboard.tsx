@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Camera, Plus, Clock, MapPin, Check, X, ArrowLeft, AlertCircle } from 'lucide-react';
-import { City, CITIES, Language, Area, Listing } from '../types';
+import { City, CITIES, Language, Area, Listing, INITIAL_AREAS } from '../types';
 import { translations } from '../translations';
 import { areaService } from '../services/dataService';
 import { Trash2, ExternalLink } from 'lucide-react';
@@ -40,22 +40,35 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
   const [areaError, setAreaError] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   
-  // Custom session areas state to instantly bypass Firestore onSnapshot lag
-  const [localAddedAreas, setLocalAddedAreas] = useState<Record<City, string[]>>({} as any);
+  const [cityAreas, setCityAreas] = useState<string[]>(INITIAL_AREAS[city] || []);
+
+  useEffect(() => {
+    // 2. When city changes: Immediately fetch all areas for that city again
+    // 3. Use real-time Firestore syncing (onSnapshot)
+    const unsubscribe = areaService.listenToAreasByCity(city, (fetchedAreas) => {
+      const uniqueAreas = new Set([
+        ...(INITIAL_AREAS[city] || []),
+        ...fetchedAreas.map(a => a.areaName)
+      ]);
+      const sorted = Array.from(uniqueAreas).sort((a, b) => a.localeCompare(b));
+      setCityAreas(sorted);
+      console.log('dropdown refreshed', { city, areasCount: sorted.length });
+    });
+
+    return () => unsubscribe();
+  }, [city]);
+
+  useEffect(() => {
+    if (cityAreas.length > 0 && (!area || !cityAreas.includes(area))) {
+      setArea(cityAreas[0]);
+    }
+  }, [cityAreas, area]);
 
   const t = translations[language];
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
-  };
-
-  const getCityAreas = () => {
-    const fromProps = areas[city] || [];
-    const fromLocal = localAddedAreas[city] || [];
-    // Combine and keep unique
-    const combined = Array.from(new Set([...fromProps, ...fromLocal]));
-    return combined;
   };
 
   const formatAreaName = (name: string) => {
@@ -125,6 +138,11 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
       return;
     }
 
+    if (cityAreas.includes(formatted)) {
+      setAreaError(t.duplicate_area || (language === 'en' ? 'Area already exists in this city' : 'क्षेत्र पहले से मौजूद है'));
+      return;
+    }
+
     try {
       setLoading(true);
       console.log('area save started');
@@ -137,12 +155,6 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
       });
       
       console.log('firestore success');
-
-      // Save to local added areas to instantly update option list in drop-down
-      setLocalAddedAreas(prev => ({
-        ...prev,
-        [city]: [...(prev[city] || []), formatted]
-      }));
 
       // After successful save:
       // - instantly close popup
@@ -436,10 +448,8 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
                           setCity(newCity);
                           // Clear search when switching cities
                           setSearchArea('');
-                          const cityAreas = areas[newCity] || [];
-                          const localAreas = localAddedAreas[newCity] || [];
-                          const combined = Array.from(new Set([...cityAreas, ...localAreas]));
-                          setArea(combined[0] || '');
+                          const initialForNewCity = INITIAL_AREAS[newCity] || [];
+                          setArea(initialForNewCity[0] || '');
                         }}
                         className="w-full sleek-input"
                       >
@@ -468,7 +478,7 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
                           }}
                           className="w-full sleek-input"
                         >
-                          {getCityAreas()
+                          {cityAreas
                             .filter(a => a.toLowerCase().includes(searchArea.toLowerCase()))
                             .map(a => <option key={a} value={a}>{a}</option>)}
                           <option value="custom">+ {t.add_area}</option>

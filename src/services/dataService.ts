@@ -15,7 +15,7 @@ import {
   type DocumentData
 } from 'firebase/firestore';
 import { db, auth, isFirebaseConfigured } from '../lib/firebase';
-import { UserProfile, Listing, Message, Chat, Area, UserRole } from '../types';
+import { UserProfile, Listing, Message, Chat, Area, UserRole, City } from '../types';
 
 // Error Handler
 const handleFirestoreError = (error: any, operation: string, path: string | null) => {
@@ -166,13 +166,46 @@ export const areaService = {
   listenToAreas(callback: (areas: Area[]) => void) {
     if (!isFirebaseConfigured || !db) return () => {};
     try {
-      const q = query(collection(db, 'areas'), orderBy('city'), orderBy('areaName'));
+      console.log('fetching areas');
+      const q = query(collection(db, 'areas'));
       return onSnapshot(q, (snapshot) => {
-        callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Area)));
+        const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Area));
+        // Sort mapped areas alphabetically by city, then by areaName in JavaScript to avoid composite index requirements
+        fetched.sort((a, b) => {
+          const cityCompare = (a.city || '').localeCompare(b.city || '');
+          if (cityCompare !== 0) return cityCompare;
+          return (a.areaName || '').localeCompare(b.areaName || '');
+        });
+        console.log('areas loaded', fetched.length);
+        callback(fetched);
       }, (error) => {
+        console.error('firestore list areas failed', error);
         handleFirestoreError(error, 'list', 'areas');
       });
     } catch (error) {
+      console.error('firestore list areas init failed', error);
+      handleFirestoreError(error, 'list-init', 'areas');
+      return () => {};
+    }
+  },
+
+  listenToAreasByCity(city: City, callback: (areas: Area[]) => void) {
+    if (!isFirebaseConfigured || !db) return () => {};
+    try {
+      console.log('fetching areas', city);
+      const q = query(collection(db, 'areas'), where('city', '==', city));
+      return onSnapshot(q, (snapshot) => {
+        const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Area));
+        // Sort mapped areas alphabetically by areaName in JavaScript to avoid index requirements
+        fetched.sort((a, b) => (a.areaName || '').localeCompare(b.areaName || ''));
+        console.log('areas loaded', fetched.length);
+        callback(fetched);
+      }, (error) => {
+        console.error('firestore list areas by city failed', city, error);
+        handleFirestoreError(error, 'list', 'areas');
+      });
+    } catch (error) {
+      console.error('firestore list areas by city init failed', city, error);
       handleFirestoreError(error, 'list-init', 'areas');
       return () => {};
     }
