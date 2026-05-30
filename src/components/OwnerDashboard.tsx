@@ -40,6 +40,7 @@ export default function OwnerDashboard({
   const [status, setStatus] = useState<'Available Now' | 'Not Available'>('Available Now');
   const [photos, setPhotos] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isAddingArea, setIsAddingArea] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const [showAreaSuccessPopup, setShowAreaSuccessPopup] = useState(false);
@@ -153,6 +154,7 @@ export default function OwnerDashboard({
   };
 
   const handleAddNewArea = async () => {
+    console.log("Add Area clicked");
     setAreaError('');
     setLastAddedAreaId(null);
     if (!customArea.trim()) return;
@@ -172,9 +174,10 @@ export default function OwnerDashboard({
     }
 
     try {
+      setIsAddingArea(true);
       setLoading(true);
       const areaName = formatted;
-      console.log("Saving area", { city: targetCity, areaName });
+      console.log("Before addArea", { city: targetCity, areaName });
       showToast("Saving area...", "loading");
 
       // 1. Verify addDoc() is actually executed successfully by capturing the resulting ID
@@ -187,6 +190,7 @@ export default function OwnerDashboard({
         throw new Error('Firestore write did not return a valid document ID.');
       }
 
+      console.log("After addArea success", newAreaDocId);
       setLastAddedAreaId(newAreaDocId);
 
       const docRef = { id: newAreaDocId };
@@ -198,7 +202,7 @@ export default function OwnerDashboard({
 
       // Automatically refresh areas list in parent App component
       if (onRefreshAreas) {
-        onRefreshAreas();
+        await onRefreshAreas();
       }
 
       // Log selected city
@@ -221,7 +225,7 @@ export default function OwnerDashboard({
       setCustomArea('');
       
       // show success toast and success popup
-      showToast("Area saved successfully", "success");
+      showToast("Area added successfully", "success");
 
       setShowAreaSuccessPopup(true);
       setTimeout(() => {
@@ -229,9 +233,9 @@ export default function OwnerDashboard({
       }, 2500);
 
     } catch (error: any) {
-      console.error("Firestore error", error);
+      console.error(error);
 
-      // 3. Extract exact Firestore error message
+      // Extract exact Firestore error message
       let exactErrorMessage = error instanceof Error ? error.message : String(error);
       try {
         if (exactErrorMessage.startsWith('{')) {
@@ -252,8 +256,10 @@ export default function OwnerDashboard({
       setAreaErrorMessage(exactErrorMessage);
       setShowAreaErrorPopup(true);
     } finally {
-      // Ensure loading is stopped
+      // Ensure loading state is always reset
+      setIsAddingArea(false);
       setLoading(false);
+      console.log("Add Area completed");
       console.log('[OwnerDashboard] Finished handleAddNewArea execution cycle.');
     }
   };
@@ -697,10 +703,10 @@ export default function OwnerDashboard({
 
                 <button
                   onClick={handleAddNewArea}
-                  disabled={loading || !customArea.trim()}
+                  disabled={isAddingArea || loading || !customArea.trim()}
                   className="w-full sleek-btn-primary py-4 mt-2 flex items-center justify-center gap-2"
                 >
-                  {loading ? (
+                  {isAddingArea || loading ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   ) : (
                     <>
