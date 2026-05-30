@@ -21,7 +21,7 @@ if (missingConfigKeys.length > 0) {
   console.log("[Firebase] Environment variables validated successfully.");
 }
 
-console.log(firebaseConfig);
+console.log("firebaseConfig:", firebaseConfig);
 
 const app = initializeApp(firebaseConfig);
 
