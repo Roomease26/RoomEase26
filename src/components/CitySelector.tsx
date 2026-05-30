@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { MapPin, ChevronRight, Search, Plus } from 'lucide-react';
-import { CITIES, City, Language } from '../types';
+import { City, Language } from '../types';
 import { translations } from '../translations';
 
 interface Props {
@@ -16,6 +16,9 @@ export default function CitySelector({ areas, language, onSelect }: Props) {
   const [showCustomInput, setShowCustomInput] = useState(false);
 
   const t = translations[language];
+
+  const cities = Object.keys(areas).sort((a, b) => a.localeCompare(b));
+  console.log("Available Cities:", cities);
 
   return (
     <div className="min-h-screen bg-[#F7F9FC] p-6 pb-24">
@@ -32,7 +35,7 @@ export default function CitySelector({ areas, language, onSelect }: Props) {
 
         {!selectedCity ? (
           <div className="space-y-3">
-            {CITIES.map((city) => (
+            {cities.map((city) => (
               <motion.button
                 key={city}
                 whileTap={{ scale: 0.98 }}
@@ -46,7 +49,7 @@ export default function CitySelector({ areas, language, onSelect }: Props) {
                   <div className="text-left">
                     <span className="block text-lg font-semibold text-[#1A1F36]">{city}</span>
                     <span className="text-[11px] text-[#697386] font-medium">
-                      {areas[city].length} {t.rooms_available}
+                      {(areas[city] || []).length} {t.rooms_available}
                     </span>
                   </div>
                 </div>

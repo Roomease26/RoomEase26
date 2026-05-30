@@ -58,16 +58,7 @@ export interface Message {
   createdAt: string;
 }
 
-export const CITIES = ['Bramhapuri', 'Nagbhid', 'Wadsa', 'Armori', 'Gadchiroli'] as const;
-export type City = typeof CITIES[number];
-
-export const INITIAL_AREAS: Record<City, string[]> = {
-  'Bramhapuri': ['Main Market', 'College Road', 'Station Area', 'Gujari Ward', 'Vidya Nagar', 'Shastri Ward'],
-  'Nagbhid': ['Bus Stand', 'Railway Station', 'Main Road', 'Tahsil Office Area'],
-  'Wadsa': ['Market Yard', 'Desaiganj', 'Kurkheda Road', 'Railway Colony'],
-  'Armori': ['Main Chowk', 'College Area', 'Gadchiroli Road', 'Vairagad Road'],
-  'Gadchiroli': ['Complex Area', 'Indira Gandhi Chowk', 'Collector Office Road', 'Dhanora Road', 'Chamorshi Road']
-};
+export type City = string;
 
 export const PRICING = {
   UNLOCK_FEE: 49,

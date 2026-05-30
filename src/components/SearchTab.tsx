@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Search, MapPin, X, Home } from 'lucide-react';
-import { Listing, CITIES, INITIAL_AREAS, Language, UserProfile } from '../types';
+import { Listing, Language, UserProfile } from '../types';
 import ListingCard from './ListingCard';
 import { translations } from '../translations';
 
@@ -21,6 +21,9 @@ export default function SearchTab({ listings, user, areas, isCityPaid, language,
   const [selectedArea, setSelectedArea] = useState<string>('');
 
   const t = translations[language];
+
+  const cities = Object.keys(areas).sort((a, b) => a.localeCompare(b));
+  console.log("Available Cities:", cities);
 
   const filteredListings = listings.filter(listing => {
     const matchesQuery = listing.area.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -62,7 +65,7 @@ export default function SearchTab({ listings, user, areas, isCityPaid, language,
                 className="flex-1 sleek-input py-2 text-xs"
               >
                 <option value="">{t.select_city}</option>
-                {CITIES.map(city => <option key={city} value={city}>{city}</option>)}
+                {cities.map(city => <option key={city} value={city}>{city}</option>)}
               </select>
 
               <select

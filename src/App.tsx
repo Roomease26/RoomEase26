@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  City, CITIES, INITIAL_AREAS, Language, UserProfile, Listing, Message, Chat, Area, UserRole, PRICING 
+  City, Language, UserProfile, Listing, Message, Chat, Area, UserRole, PRICING 
 } from './types';
 import { Routes, Route, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import LanguageSelector from './components/LanguageSelector';
@@ -44,7 +44,7 @@ export default function App() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [paymentCity, setPaymentCity] = useState<City | null>(null);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
-  const [areas, setAreas] = useState<Record<City, string[]>>(INITIAL_AREAS);
+  const [areas, setAreas] = useState<Record<City, string[]>>({});
   const [rawAreas, setRawAreas] = useState<Area[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -122,25 +122,25 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = areaService.listenToAreas((fetchedAreas) => {
       setRawAreas(fetchedAreas);
-      // Create a fresh copy of INITIAL_AREAS
-      const mergedAreas: Record<City, string[]> = {} as any;
-      (Object.keys(INITIAL_AREAS) as City[]).forEach(city => {
-        mergedAreas[city] = [...INITIAL_AREAS[city]];
-      });
+      const mergedAreas: Record<City, string[]> = {};
 
       fetchedAreas.forEach(a => {
-        if (mergedAreas[a.city] && !mergedAreas[a.city].includes(a.areaName)) {
-          mergedAreas[a.city] = [...mergedAreas[a.city], a.areaName];
+        if (!mergedAreas[a.city]) {
+          mergedAreas[a.city] = [];
+        }
+        if (!mergedAreas[a.city].includes(a.areaName)) {
+          mergedAreas[a.city].push(a.areaName);
         }
       });
 
-      const staticAreas = Object.values(INITIAL_AREAS).flat();
-      const firestoreAreas = fetchedAreas;
-      const finalAreas = Object.values(mergedAreas).flat();
+      // Sort areas within each city alphabetically
+      Object.keys(mergedAreas).forEach(city => {
+        mergedAreas[city].sort((a, b) => a.localeCompare(b));
+      });
 
-      console.log("Static areas count:", staticAreas.length);
-      console.log("Firestore areas count:", firestoreAreas.length);
-      console.log("Final merged areas count:", finalAreas.length);
+      console.log("Firestore areas count:", fetchedAreas.length);
+      const cities = Object.keys(mergedAreas).sort((a, b) => a.localeCompare(b));
+      console.log("Available Cities:", cities);
 
       setAreas(mergedAreas);
       localStorage.setItem('roomease_areas', JSON.stringify(mergedAreas));
@@ -380,16 +380,25 @@ export default function App() {
       const fetchedAreas = await areaService.getAllAreas();
       setRawAreas(fetchedAreas);
       
-      const mergedAreas: Record<City, string[]> = {} as any;
-      (Object.keys(INITIAL_AREAS) as City[]).forEach(city => {
-        mergedAreas[city] = [...INITIAL_AREAS[city]];
-      });
-
+      const mergedAreas: Record<City, string[]> = {};
       fetchedAreas.forEach(a => {
-        if (mergedAreas[a.city] && !mergedAreas[a.city].includes(a.areaName)) {
-          mergedAreas[a.city] = [...mergedAreas[a.city], a.areaName];
+        if (!mergedAreas[a.city]) {
+          mergedAreas[a.city] = [];
+        }
+        if (!mergedAreas[a.city].includes(a.areaName)) {
+          mergedAreas[a.city].push(a.areaName);
         }
       });
+
+      // Sort areas within each city alphabetically
+      Object.keys(mergedAreas).forEach(city => {
+        mergedAreas[city].sort((a, b) => a.localeCompare(b));
+      });
+
+      console.log("Firestore areas count on refresh:", fetchedAreas.length);
+      const cities = Object.keys(mergedAreas).sort((a, b) => a.localeCompare(b));
+      console.log("Available Cities:", cities);
+
       setAreas(mergedAreas);
       localStorage.setItem('roomease_areas', JSON.stringify(mergedAreas));
       console.log('[App] Areas refreshed successfully:', fetchedAreas.length);
@@ -414,13 +423,13 @@ export default function App() {
     const formatted = areaName.toLowerCase().trim().split(' ').filter(Boolean).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     setSelectedLocation({ city, area: formatted });
     
-    if (!areas[city].includes(formatted)) {
+    if (!areas[city] || !areas[city].includes(formatted)) {
       console.log('[App] Saving custom search area:', formatted);
       
       // Optimistic update
       const updatedAreas = {
         ...areas,
-        [city]: [...areas[city], formatted]
+        [city]: [...(areas[city] || []), formatted]
       };
       setAreas(updatedAreas);
 
