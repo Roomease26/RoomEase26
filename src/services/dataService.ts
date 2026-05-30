@@ -172,17 +172,29 @@ export const areaService = {
   listenToAreas(callback: (areas: Area[]) => void) {
     if (!isFirebaseConfigured || !db) return () => {};
     try {
-      console.log('fetching areas');
+      console.log("Collection path:", "areas");
       const q = query(collection(db, 'areas'));
       return onSnapshot(q, (snapshot) => {
-        const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Area));
+        console.log("Snapshot size:", snapshot.size);
+
+        snapshot.forEach((doc) => {
+          console.log("DOC ID:", doc.id);
+          console.log("DOC DATA:", doc.data());
+        });
+
+        const fetched = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Area));
+
         // Sort mapped areas alphabetically by city, then by areaName in JavaScript to avoid composite index requirements
         fetched.sort((a, b) => {
           const cityCompare = (a.city || '').localeCompare(b.city || '');
           if (cityCompare !== 0) return cityCompare;
           return (a.areaName || '').localeCompare(b.areaName || '');
         });
-        console.log('areas loaded', fetched.length);
+
+        console.log("Fetched array:", fetched);
         callback(fetched);
       }, (error) => {
         console.error('firestore list areas failed', error);

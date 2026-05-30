@@ -22,6 +22,7 @@ import PaymentModal from './components/PaymentModal';
 import ImageGenerator from './components/ImageGenerator';
 import SearchTab from './components/SearchTab';
 import ErrorBoundary from './components/ErrorBoundary';
+import FirebaseDiagnostics from './components/FirebaseDiagnostics';
 import { Search } from 'lucide-react';
 import { translations } from './translations';
 import { userService, listingService, paymentService, areaService } from './services/dataService';
@@ -732,6 +733,7 @@ export default function App() {
             )}
           </>
         )}
+        <FirebaseDiagnostics />
       </div>
     </ErrorBoundary>
   );
