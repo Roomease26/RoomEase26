@@ -177,32 +177,30 @@ export default function OwnerDashboard({
       setIsAddingArea(true);
       setLoading(true);
       const areaName = formatted;
-      console.log("Before addArea", { city: targetCity, areaName });
       showToast("Saving area...", "loading");
 
       // 1. Verify addDoc() is actually executed successfully by capturing the resulting ID
+      console.log("Before addArea", { city: targetCity, areaName });
       const newAreaDocId = await areaService.addArea({
         city: targetCity,
         areaName
       });
+      console.log("After addArea success", newAreaDocId);
 
       if (!newAreaDocId) {
         throw new Error('Firestore write did not return a valid document ID.');
       }
 
-      console.log("After addArea success", newAreaDocId);
       setLastAddedAreaId(newAreaDocId);
 
-      const docRef = { id: newAreaDocId };
-      console.log("Area saved", docRef.id);
-
-      // Immediately fetch all areas again and log
-      const fetchedAreas = await areaService.getAllAreas();
-      console.log("Areas after refresh", fetchedAreas);
-
-      // Automatically refresh areas list in parent App component
-      if (onRefreshAreas) {
-        await onRefreshAreas();
+      // Trigger refresh asynchronously and independently so that save is completely unblocked
+      console.log("Triggering onRefreshAreas (non-blocking/independent)...");
+      try {
+        if (onRefreshAreas) {
+          onRefreshAreas();
+        }
+      } catch (err) {
+        console.error("Refresh areas failed but ignored:", err);
       }
 
       // Log selected city
@@ -233,7 +231,7 @@ export default function OwnerDashboard({
       }, 2500);
 
     } catch (error: any) {
-      console.error(error);
+      console.error("Error during area creation:", error);
 
       // Extract exact Firestore error message
       let exactErrorMessage = error instanceof Error ? error.message : String(error);
