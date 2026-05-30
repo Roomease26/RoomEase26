@@ -143,22 +143,28 @@ export const areaService = {
   async addArea(area: any): Promise<string> {
     try {
       checkConfig();
-      // 9. Add console logs: area save started
-      console.log('area save started', { city: area.city, areaName: area.areaName });
       
       const docRef = await addDoc(collection(db, 'areas'), {
         city: area.city,
-        areaName: area.areaName,
-        createdAt: new Date().toISOString()
+        areaName: area.areaName
       });
       
-      // 9. Add console logs: area save success
-      console.log('area save success', { id: docRef.id, city: area.city, areaName: area.areaName });
+      console.log("Area saved", docRef.id);
       return docRef.id;
     } catch (error) {
-      // 9. Add console logs: firestore save failed
-      console.error('firestore save failed', error);
+      console.error("Firestore error", error);
       handleFirestoreError(error, 'write', 'areas');
+      throw error;
+    }
+  },
+
+  async getAllAreas(): Promise<Area[]> {
+    try {
+      checkConfig();
+      const querySnapshot = await getDocs(collection(db, 'areas'));
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Area));
+    } catch (error) {
+      console.error("Firestore error", error);
       throw error;
     }
   },
@@ -192,13 +198,16 @@ export const areaService = {
   listenToAreasByCity(city: City, callback: (areas: Area[]) => void) {
     if (!isFirebaseConfigured || !db) return () => {};
     try {
-      console.log('fetching areas', city);
+      console.log("Querying areas for city:", city);
       const q = query(collection(db, 'areas'), where('city', '==', city));
       return onSnapshot(q, (snapshot) => {
         const fetched = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Area));
         // Sort mapped areas alphabetically by areaName in JavaScript to avoid index requirements
         fetched.sort((a, b) => (a.areaName || '').localeCompare(b.areaName || ''));
-        console.log('areas loaded', fetched.length);
+        console.log("Areas returned:", fetched);
+        if (fetched.length === 0) {
+          console.warn("No areas found for city:", city);
+        }
         callback(fetched);
       }, (error) => {
         console.error('firestore list areas by city failed', city, error);

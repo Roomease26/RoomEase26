@@ -38,7 +38,8 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
   const [customArea, setCustomArea] = useState('');
   const [isCustomArea, setIsCustomArea] = useState(false);
   const [areaError, setAreaError] = useState('');
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [lastAddedAreaId, setLastAddedAreaId] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'loading' } | null>(null);
   
   const [cityAreas, setCityAreas] = useState<string[]>(INITIAL_AREAS[city] || []);
 
@@ -66,9 +67,11 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
 
   const t = translations[language];
 
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = (message: string, type: 'success' | 'error' | 'loading' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
+    if (type !== 'loading') {
+      setTimeout(() => setToast(null), 3000);
+    }
   };
 
   const formatAreaName = (name: string) => {
@@ -129,12 +132,13 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
 
   const handleAddNewArea = async () => {
     setAreaError('');
+    setLastAddedAreaId(null);
     if (!customArea.trim()) return;
     
     const formatted = formatAreaName(customArea);
-    const error = validateAreaName(formatted);
-    if (error) {
-      setAreaError(error);
+    const errorMsg = validateAreaName(formatted);
+    if (errorMsg) {
+      setAreaError(errorMsg);
       return;
     }
 
@@ -144,31 +148,35 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
     }
 
     try {
-      // 2. Log before addDoc execution
-      console.log('[OwnerDashboard] [Firebase] Initiating addArea action with payload:', {
-        city,
-        areaName: formatted,
-        createdBy: currentUserId || 'anonymous'
-      });
-      
       setLoading(true);
+      const areaName = formatted;
+      console.log("Saving area", { city, areaName });
+      showToast("Saving area...", "loading");
 
       // 1. Verify addDoc() is actually executed successfully by capturing the resulting ID
       const newAreaDocId = await areaService.addArea({
         city,
-        areaName: formatted,
-        createdBy: currentUserId || 'anonymous',
-        createdAt: new Date().toISOString()
+        areaName
       });
 
       if (!newAreaDocId) {
         throw new Error('Firestore write did not return a valid document ID.');
       }
 
-      // 2. Log after addDoc success
-      console.log('[OwnerDashboard] [Firebase] Area saved successfully. Firestore document ID:', newAreaDocId);
+      setLastAddedAreaId(newAreaDocId);
 
-      // 4. Update local state only after successful verification of the write success
+      const docRef = { id: newAreaDocId };
+      console.log("Area saved", docRef.id);
+
+      // Immediately fetch all areas again and log
+      const fetchedAreas = await areaService.getAllAreas();
+      console.log("Areas after refresh", fetchedAreas);
+
+      // Log selected city
+      const selectedCity = city;
+      console.log("Current city filter", selectedCity);
+
+      // Update local state only after successful verification of the write success
       setCityAreas(prev => {
         if (!prev.includes(formatted)) {
           return [...prev, formatted].sort((a, b) => a.localeCompare(b));
@@ -184,21 +192,19 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
       setArea(formatted);
       setCustomArea('');
       
-      // 5. After successful addDoc: show success toast and success popup
-      const successMessage = language === 'en' ? '✅ Area added successfully' : '✅ क्षेत्र सफलतापूर्वक जोड़ा गया';
-      showToast(successMessage, 'success');
+      // show success toast and success popup
+      showToast("Area saved successfully", "success");
 
       setShowAreaSuccessPopup(true);
       setTimeout(() => {
         setShowAreaSuccessPopup(false);
       }, 2500);
 
-    } catch (err: any) {
-      // 2. Log catch error
-      console.error('[OwnerDashboard] [Firebase] Error adding area document to Firestore:', err);
+    } catch (error: any) {
+      console.error("Firestore error", error);
 
       // 3. Extract exact Firestore error message
-      let exactErrorMessage = err instanceof Error ? err.message : String(err);
+      let exactErrorMessage = error instanceof Error ? error.message : String(error);
       try {
         if (exactErrorMessage.startsWith('{')) {
           const parsed = JSON.parse(exactErrorMessage);
@@ -212,8 +218,8 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
         exactErrorMessage = t.duplicate_area || 'Area already exists in this city';
       }
 
-      // 6. If addDoc fails: stop loading and show error popup
-      setLoading(false);
+      showToast("Failed to save area", "error");
+
       setAreaError(exactErrorMessage);
       setAreaErrorMessage(exactErrorMessage);
       setShowAreaErrorPopup(true);
@@ -286,9 +292,10 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
     <div className="min-h-screen bg-[#F7F9FC] pb-24">
       <div className="max-w-md mx-auto p-6">
         {toast && (
-          <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-2xl shadow-xl text-white font-bold text-sm animate-in fade-in slide-in-from-top-4 duration-300 ${
-            toast.type === 'success' ? 'bg-[#33CC66]' : 'bg-red-500'
+          <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-2xl shadow-xl text-white font-bold text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-300 ${
+            toast.type === 'success' ? 'bg-[#33CC66]' : toast.type === 'loading' ? 'bg-[#5469D4]' : 'bg-red-500'
           }`}>
+            {toast.type === 'loading' && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
             {toast.message}
           </div>
         )}
@@ -332,9 +339,15 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
               <h2 className="text-xl font-bold text-[#1A1F36] mb-2 uppercase tracking-wide">
                 {language === 'en' ? 'Success!' : 'सफल!'}
               </h2>
-              <p className="text-[#697386] font-medium leading-relaxed">
+              <p className="text-[#697386] font-medium leading-relaxed mb-4">
                 ✅ {language === 'en' ? 'Area added successfully' : 'क्षेत्र सफलतापूर्वक जोड़ा गया'}
               </p>
+              {lastAddedAreaId && (
+                <div className="bg-[#F7F9FC] p-3 rounded-2xl border border-[#E3E8EE] flex flex-col items-center justify-center">
+                  <span className="text-[9px] font-bold text-[#697386] uppercase tracking-wider mb-1">Firestore Doc ID</span>
+                  <span className="text-[11px] font-mono font-medium text-[#1A1F36] break-all select-all">{lastAddedAreaId}</span>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
@@ -463,6 +476,7 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
                         value={city} 
                         onChange={(e) => {
                           const newCity = e.target.value as City;
+                          console.log("Selected city:", newCity);
                           setCity(newCity);
                           // Clear search when switching cities
                           setSearchArea('');
@@ -512,6 +526,19 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
                         >
                           {t.area_not_found}
                         </button>
+
+                        {/* Temporary Debug Box */}
+                        <div id="area-loading-debug-box" className="p-4 bg-[#F4F6F8] rounded-2xl border border-[#D3DBE6] space-y-2 mt-2">
+                          <h4 className="text-[10px] font-bold text-[#4F5B66] uppercase tracking-wider">🛠️ Area Loading Debugger</h4>
+                          <div className="text-[11px] space-y-1 font-mono text-[#1A1F36]">
+                            <div><strong className="text-[#697386]">Selected City:</strong> {city}</div>
+                            <div><strong className="text-[#697386]">Areas Loaded:</strong> {cityAreas.length}</div>
+                            <div className="max-h-24 overflow-y-auto bg-white p-2 rounded-lg border border-[#E3E8EE] break-words">
+                              <strong className="text-[#697386] block mb-0.5">Loaded Areas:</strong>
+                              {cityAreas.length > 0 ? cityAreas.join(', ') : 'No areas loaded.'}
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
 

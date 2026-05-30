@@ -347,9 +347,7 @@ export default function App() {
         try {
           await areaService.addArea({
             city,
-            areaName: listing.area,
-            createdBy: user?.uid || 'anonymous',
-            createdAt: new Date().toISOString()
+            areaName: listing.area
           });
           showToast(language === 'en' ? 'Area saved' : 'क्षेत्र सहेजा गया');
         } catch (err: any) {
@@ -396,9 +394,7 @@ export default function App() {
       try {
         await areaService.addArea({
           city,
-          areaName: formatted,
-          createdBy: user?.uid || 'anonymous',
-          createdAt: new Date().toISOString()
+          areaName: formatted
         });
       } catch (err: any) {
         if (err.message !== 'Area already exists in this city') {
