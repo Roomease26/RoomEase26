@@ -130,7 +130,7 @@ service cloud.firestore {
     // Areas Collection
     match /areas/{areaId} {
       allow read: if true;
-      allow create: if isSignedIn(); // Allow contributors
+      allow create: if true; // Allow both authenticated and unauthenticated manual session users to add areas
       allow update, delete: if isAdmin();
     }
   }

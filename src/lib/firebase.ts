@@ -1,10 +1,6 @@
-import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-
-console.log("API KEY:", import.meta.env.VITE_FIREBASE_API_KEY);
-console.log("PROJECT ID:", import.meta.env.VITE_FIREBASE_PROJECT_ID);
-console.log("APP ID:", import.meta.env.VITE_FIREBASE_APP_ID);
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,34 +11,22 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-let db: any = null;
-let auth: any = null;
-const isFirebaseConfigured = true;
+// Validate environment variables and log missing ones clearly
+const requiredKeys = ["apiKey", "projectId", "appId"] as const;
+const missingConfigKeys = requiredKeys.filter(key => !firebaseConfig[key]);
 
-try {
-  const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-  const databaseId = import.meta.env.VITE_FIREBASE_DATABASE_ID || '(default)';
-  db = getFirestore(app, databaseId);
-  auth = getAuth(app);
-  console.log('[Firebase] ✅ Initialization successful');
-} catch (error) {
-  console.error('[Firebase] ❌ Initialization error:', error);
-  auth = { currentUser: null };
+if (missingConfigKeys.length > 0) {
+  console.error(`[Firebase Configuration Error] Missing critical env variables: ${missingConfigKeys.map(k => `VITE_FIREBASE_${k.toUpperCase()}`).join(", ")}`);
+} else {
+  console.log("[Firebase] Environment variables validated successfully.");
 }
 
-export { db, auth, isFirebaseConfigured };
+console.log(firebaseConfig);
 
-// Connectivity Test
-async function testConnection() {
-  if (!isFirebaseConfigured || !db) return;
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log('[Firebase] 📡 Connection test successful');
-  } catch (error: any) {
-    if (error.message?.includes('the client is offline')) {
-      console.warn("[Firebase] 📵 Client is offline or config is invalid.");
-    }
-  }
-}
+const app = initializeApp(firebaseConfig);
 
-testConnection();
+export const auth = getAuth(app);
+export const db = getFirestore(app, import.meta.env.VITE_FIREBASE_DATABASE_ID || '(default)');
+export const isFirebaseConfigured = true;
+
+export default app;

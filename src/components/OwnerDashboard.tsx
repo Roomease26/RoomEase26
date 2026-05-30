@@ -144,65 +144,83 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
     }
 
     try {
-      setLoading(true);
-      console.log('area save started');
+      // 2. Log before addDoc execution
+      console.log('[OwnerDashboard] [Firebase] Initiating addArea action with payload:', {
+        city,
+        areaName: formatted,
+        createdBy: currentUserId || 'anonymous'
+      });
       
-      await areaService.addArea({
+      setLoading(true);
+
+      // 1. Verify addDoc() is actually executed successfully by capturing the resulting ID
+      const newAreaDocId = await areaService.addArea({
         city,
         areaName: formatted,
         createdBy: currentUserId || 'anonymous',
         createdAt: new Date().toISOString()
       });
-      
-      console.log('firestore success');
 
-      // After successful save:
+      if (!newAreaDocId) {
+        throw new Error('Firestore write did not return a valid document ID.');
+      }
+
+      // 2. Log after addDoc success
+      console.log('[OwnerDashboard] [Firebase] Area saved successfully. Firestore document ID:', newAreaDocId);
+
+      // 4. Update local state only after successful verification of the write success
+      setCityAreas(prev => {
+        if (!prev.includes(formatted)) {
+          return [...prev, formatted].sort((a, b) => a.localeCompare(b));
+        }
+        return prev;
+      });
+
       // - instantly close popup
       setShowAreaModal(false);
-      console.log('popup closed');
+      console.log('[OwnerDashboard] Closed addition modal.');
 
       // - auto-select newly added area
       setArea(formatted);
       setCustomArea('');
       
-      // show success toast:
+      // 5. After successful addDoc: show success toast and success popup
       const successMessage = language === 'en' ? '✅ Area added successfully' : '✅ क्षेत्र सफलतापूर्वक जोड़ा गया';
       showToast(successMessage, 'success');
 
-      // Show success popup modal for area
       setShowAreaSuccessPopup(true);
       setTimeout(() => {
         setShowAreaSuccessPopup(false);
-      }, 2000);
+      }, 2500);
 
     } catch (err: any) {
-      console.error('firestore save failed', err);
-      
-      let errMsg = 'Failed to save area.';
+      // 2. Log catch error
+      console.error('[OwnerDashboard] [Firebase] Error adding area document to Firestore:', err);
+
+      // 3. Extract exact Firestore error message
+      let exactErrorMessage = err instanceof Error ? err.message : String(err);
       try {
-        if (err.message) {
-          if (err.message.startsWith('{')) {
-            const parsed = JSON.parse(err.message);
-            errMsg = parsed.error || errMsg;
-          } else {
-            errMsg = err.message;
-          }
+        if (exactErrorMessage.startsWith('{')) {
+          const parsed = JSON.parse(exactErrorMessage);
+          exactErrorMessage = parsed.error || exactErrorMessage;
         }
-      } catch (parseErr) {
-        errMsg = err.message;
-      }
-      
-      if (errMsg.includes('Area already exists')) {
-        errMsg = t.duplicate_area || 'Area already exists in this city';
+      } catch (parseError) {
+        // Fallback to original message string
       }
 
-      setAreaError(errMsg);
-      setAreaErrorMessage(errMsg);
+      if (exactErrorMessage.includes('Area already exists')) {
+        exactErrorMessage = t.duplicate_area || 'Area already exists in this city';
+      }
+
+      // 6. If addDoc fails: stop loading and show error popup
+      setLoading(false);
+      setAreaError(exactErrorMessage);
+      setAreaErrorMessage(exactErrorMessage);
       setShowAreaErrorPopup(true);
     } finally {
-      // Always stop loading using finally
+      // Ensure loading is stopped
       setLoading(false);
-      console.log('loading stopped');
+      console.log('[OwnerDashboard] Finished handleAddNewArea execution cycle.');
     }
   };
 
