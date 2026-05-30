@@ -16,6 +16,7 @@ export default function FirebaseDiagnostics() {
   const [snapshotSize, setSnapshotSize] = useState<number | null>(null);
   const [firstDocData, setFirstDocData] = useState<any>(null);
   const [totalFetchedCount, setTotalFetchedCount] = useState<number | null>(null);
+  const [currentProjectId, setCurrentProjectId] = useState<string>('Unknown');
 
   // Load configs
   const firebaseConfig = {
@@ -29,6 +30,19 @@ export default function FirebaseDiagnostics() {
 
   const runDiagnostics = async () => {
     console.log("--- STARTING FIREBASE DIAGNOSTICS REPORT ---");
+
+    // On startup / diagnosis log
+    console.log("Firebase Project ID:", firebaseConfig.projectId);
+    try {
+      const app = getApp();
+      console.log("Connected Project:", app.options.projectId);
+      setCurrentProjectId(app.options.projectId || 'Unknown');
+    } catch (e: any) {
+      console.error("Failed to read active app project config:", e);
+      if (firebaseConfig.projectId) {
+        setCurrentProjectId(firebaseConfig.projectId);
+      }
+    }
 
     // 1. Firebase initialization status
     console.log("Firebase Initialization Status:", {
@@ -112,6 +126,17 @@ export default function FirebaseDiagnostics() {
   };
 
   useEffect(() => {
+    console.log("Firebase Project ID:", firebaseConfig.projectId);
+    try {
+      const app = getApp();
+      console.log("Connected Project:", app.options.projectId);
+      setCurrentProjectId(app.options.projectId || 'Unknown');
+    } catch (e: any) {
+      console.error("Firebase Connected Project fetch failed on mount:", e);
+      if (firebaseConfig.projectId) {
+        setCurrentProjectId(firebaseConfig.projectId);
+      }
+    }
     runDiagnostics();
   }, []);
 
@@ -168,6 +193,13 @@ export default function FirebaseDiagnostics() {
                 firebaseConnected === 'No' ? 'bg-red-500/10 text-red-500' : 'bg-amber-500/10 text-amber-500'
               }`}>
                 {firebaseConnected}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-[#1A1F36] border-b border-[#F7F9FC] pb-1.5 flex-wrap gap-1">
+              <span className="text-[#697386] font-medium">Current Project ID:</span>
+              <span id="diagnostics-current-project-id" className="font-mono font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-lg border border-gray-200 text-[10px] break-all max-w-[160px] text-right">
+                {currentProjectId}
               </span>
             </div>
 

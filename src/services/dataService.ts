@@ -173,6 +173,7 @@ export const areaService = {
     if (!isFirebaseConfigured || !db) return () => {};
     try {
       console.log("Collection path:", "areas");
+      console.log("Collection queried:", "areas");
       const q = query(collection(db, 'areas'));
       return onSnapshot(q, (snapshot) => {
         console.log("Snapshot size:", snapshot.size);
