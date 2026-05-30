@@ -17,7 +17,7 @@ interface Props {
 
 export default function SearchTab({ listings, user, areas, isCityPaid, language, onUnlock, onChat }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCity, setSelectedCity] = useState<string>('');
+  const [selectedCity, setSelectedCity] = useState<string>('Bramhapuri');
   const [selectedArea, setSelectedArea] = useState<string>('');
 
   const t = translations[language];
@@ -29,7 +29,7 @@ export default function SearchTab({ listings, user, areas, isCityPaid, language,
     const matchesQuery = listing.area.toLowerCase().includes(searchQuery.toLowerCase()) || 
                         listing.city.toLowerCase().includes(searchQuery.toLowerCase()) ||
                         listing.landmark.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCity = selectedCity ? listing.city === selectedCity : true;
+    const matchesCity = listing.city === "Bramhapuri";
     const matchesArea = selectedArea ? listing.area === selectedArea : true;
     return matchesQuery && matchesCity && matchesArea;
   });
@@ -57,25 +57,12 @@ export default function SearchTab({ listings, user, areas, isCityPaid, language,
 
             <div className="flex gap-2">
               <select
-                value={selectedCity}
-                onChange={(e) => {
-                  setSelectedCity(e.target.value);
-                  setSelectedArea('');
-                }}
-                className="flex-1 sleek-input py-2 text-xs"
-              >
-                <option value="">{t.select_city}</option>
-                {cities.map(city => <option key={city} value={city}>{city}</option>)}
-              </select>
-
-              <select
                 value={selectedArea}
                 onChange={(e) => setSelectedArea(e.target.value)}
-                className="flex-1 sleek-input py-2 text-xs"
-                disabled={!selectedCity}
+                className="w-full sleek-input py-2 text-xs"
               >
                 <option value="">{t.select_area}</option>
-                {selectedCity && areas[selectedCity as keyof typeof areas]?.map(area => (
+                {areas["Bramhapuri"]?.map(area => (
                   <option key={area} value={area}>{area}</option>
                 ))}
               </select>
@@ -88,11 +75,10 @@ export default function SearchTab({ listings, user, areas, isCityPaid, language,
             <h2 className="text-sm font-bold text-[#1A1F36]">
               {filteredListings.length} {t.rooms_available}
             </h2>
-            {(searchQuery || selectedCity || selectedArea) && (
+            {(searchQuery || selectedArea) && (
               <button 
                 onClick={() => {
                   setSearchQuery('');
-                  setSelectedCity('');
                   setSelectedArea('');
                 }}
                 className="text-xs text-[#5469D4] font-bold"

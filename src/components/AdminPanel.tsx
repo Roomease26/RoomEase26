@@ -208,7 +208,7 @@ export default function AdminPanel() {
                   TOP CITIES
                 </h3>
                 <div className="space-y-6">
-                  {['Bramhapuri', 'Gadchiroli', 'Chandrapur'].map((city, i) => {
+                  {['Bramhapuri'].map((city, i) => {
                     const count = listings.filter(l => l.city === city).length;
                     const percent = Math.round((count / (listings.length || 1)) * 100);
                     return (

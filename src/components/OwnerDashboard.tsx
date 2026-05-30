@@ -31,10 +31,8 @@ export default function OwnerDashboard({
   const [step, setStep] = useState<1 | 2>(1);
   const [searchArea, setSearchArea] = useState('');
   const [showAreaModal, setShowAreaModal] = useState(false);
-  const [city, setCity] = useState<City>('');
+  const [city] = useState<City>('Bramhapuri');
   const [area, setArea] = useState('');
-  const [isNewCity, setIsNewCity] = useState(false);
-  const [newCityName, setNewCityName] = useState('');
   const [address, setAddress] = useState('');
   const [landmark, setLandmark] = useState('');
   const [days, setDays] = useState('Mon–Sat');
@@ -57,12 +55,6 @@ export default function OwnerDashboard({
 
   const cities = Object.keys(areas).sort((a, b) => a.localeCompare(b));
   console.log("Available Cities:", cities);
-
-  useEffect(() => {
-    if (cities.length > 0 && (!city || !cities.includes(city))) {
-      setCity(cities[0]);
-    }
-  }, [areas, city]);
 
   useEffect(() => {
     // 1. Log Dropdown areas prop for tracing
@@ -165,14 +157,7 @@ export default function OwnerDashboard({
     setLastAddedAreaId(null);
     if (!customArea.trim()) return;
     
-    let targetCity = city;
-    if (isNewCity) {
-      if (!newCityName.trim()) {
-        setAreaError(language === 'en' ? 'City name is required' : 'शहर का नाम आवश्यक है');
-        return;
-      }
-      targetCity = formatAreaName(newCityName);
-    }
+    const targetCity = "Bramhapuri";
 
     const formatted = formatAreaName(customArea);
     const errorMsg = validateAreaName(formatted);
@@ -181,7 +166,7 @@ export default function OwnerDashboard({
       return;
     }
 
-    if (!isNewCity && cityAreas.includes(formatted)) {
+    if (cityAreas.includes(formatted)) {
       setAreaError(t.duplicate_area || (language === 'en' ? 'Area already exists in this city' : 'क्षेत्र पहले से मौजूद है'));
       return;
     }
@@ -217,25 +202,18 @@ export default function OwnerDashboard({
       }
 
       // Log selected city
-      const selectedCity = targetCity;
-      console.log("Current city filter", selectedCity);
+      console.log("Current city filter", targetCity);
 
       // Update local state only after successful verification of the write success
-      if (targetCity === city) {
-        setCityAreas(prev => {
-          if (!prev.includes(formatted)) {
-            return [...prev, formatted].sort((a, b) => a.localeCompare(b));
-          }
-          return prev;
-        });
-      } else {
-        setCity(targetCity);
-      }
+      setCityAreas(prev => {
+        if (!prev.includes(formatted)) {
+          return [...prev, formatted].sort((a, b) => a.localeCompare(b));
+        }
+        return prev;
+      });
 
       // - instantly close popup
       setShowAreaModal(false);
-      setIsNewCity(false);
-      setNewCityName('');
       console.log('[OwnerDashboard] Closed addition modal.');
 
       // - auto-select newly added area
@@ -520,25 +498,6 @@ export default function OwnerDashboard({
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {/* Location */}
                   <div className="sleek-card p-6 space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-bold text-[#697386] uppercase">{t.select_city}</label>
-                      <select 
-                        value={city} 
-                        onChange={(e) => {
-                          const newCity = e.target.value as City;
-                          console.log("Selected city:", newCity);
-                          setCity(newCity);
-                          // Clear search when switching cities
-                          setSearchArea('');
-                          const initialForNewCity = areas[newCity] || [];
-                          setArea(initialForNewCity[0] || '');
-                        }}
-                        className="w-full sleek-input"
-                      >
-                        {cities.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-
                     <div className="space-y-1.5 relative">
                       <label className="text-[11px] font-bold text-[#697386] uppercase">{t.select_area}</label>
                       <div className="flex flex-col gap-2">
@@ -708,43 +667,12 @@ export default function OwnerDashboard({
                 <h3 className="text-xl font-bold text-[#1A1F36]">{t.add_area}</h3>
                 <button onClick={() => {
                   setShowAreaModal(false);
-                  setIsNewCity(false);
-                  setNewCityName('');
                 }}>
                   <X className="w-6 h-6 text-[#697386]" />
                 </button>
               </div>
 
               <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="text-[11px] font-bold text-[#697386] uppercase tracking-wider">City</label>
-                    <button
-                      type="button"
-                      onClick={() => setIsNewCity(!isNewCity)}
-                      className="text-xs text-[#5469D4] font-bold hover:underline"
-                    >
-                      {isNewCity ? "Choose Existing" : "Add New City"}
-                    </button>
-                  </div>
-                  {isNewCity ? (
-                    <input
-                      type="text"
-                      placeholder="e.g. Nagpur"
-                      value={newCityName}
-                      onChange={(e) => {
-                        setNewCityName(e.target.value);
-                        setAreaError('');
-                      }}
-                      className={`w-full sleek-input ${areaError && !newCityName.trim() ? 'border-red-500' : ''}`}
-                      autoFocus
-                    />
-                  ) : (
-                    <div className="w-full p-4 bg-slate-50 rounded-2xl text-sm font-bold text-[#1A1F36] border border-[#E3E8EE] flex justify-between items-center">
-                      <span>{city || "No city selected"}</span>
-                    </div>
-                  )}
-                </div>
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-bold text-[#697386] uppercase tracking-wider">{t.area_name}</label>
                   <input
@@ -756,7 +684,7 @@ export default function OwnerDashboard({
                       setAreaError('');
                     }}
                     className={`w-full sleek-input ${areaError ? 'border-red-500' : ''}`}
-                    autoFocus={!isNewCity}
+                    autoFocus
                   />
                   {areaError && (
                     <p className="text-[10px] font-bold text-red-500 flex items-center gap-1">
@@ -769,7 +697,7 @@ export default function OwnerDashboard({
 
                 <button
                   onClick={handleAddNewArea}
-                  disabled={loading || !customArea.trim() || (isNewCity && !newCityName.trim())}
+                  disabled={loading || !customArea.trim()}
                   className="w-full sleek-btn-primary py-4 mt-2 flex items-center justify-center gap-2"
                 >
                   {loading ? (
