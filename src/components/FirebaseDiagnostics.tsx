@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getApp } from 'firebase/app';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, addDoc } from 'firebase/firestore';
 import { getStorage, ref, listAll } from 'firebase/storage';
 import { db } from '../lib/firebase';
 import { areaService } from '../services/dataService';
@@ -17,6 +17,16 @@ export default function FirebaseDiagnostics() {
   const [firstDocData, setFirstDocData] = useState<any>(null);
   const [totalFetchedCount, setTotalFetchedCount] = useState<number | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string>('Unknown');
+  const [currentAppName, setCurrentAppName] = useState<string>('Unknown');
+  const [currentDatabaseId, setCurrentDatabaseId] = useState<string>('Unknown');
+  const [directTestSize, setDirectTestSize] = useState<number | null>(null);
+  const [directFirstDoc, setDirectFirstDoc] = useState<any>(null);
+
+  // Write test states
+  const [testWriteStatus, setTestWriteStatus] = useState<string>('');
+  const [testWriteDocId, setTestWriteDocId] = useState<string>('');
+  const [testQueryCount, setTestQueryCount] = useState<number | null>(null);
+  const [testQueryDocs, setTestQueryDocs] = useState<any[]>([]);
 
   // Load configs
   const firebaseConfig = {
@@ -35,8 +45,16 @@ export default function FirebaseDiagnostics() {
     console.log("Firebase Project ID:", firebaseConfig.projectId);
     try {
       const app = getApp();
+      console.log("Firebase app name:", app.name);
       console.log("Connected Project:", app.options.projectId);
       setCurrentProjectId(app.options.projectId || 'Unknown');
+      setCurrentAppName(app.name || 'Unknown');
+      
+      const dbDbId = (db as any)._databaseId?.database || '(default)';
+      setCurrentDatabaseId(dbDbId);
+      
+      console.log("Firestore instance details:", db);
+      console.log("Firestore db instance matches app initialization:", db.app === app);
     } catch (e: any) {
       console.error("Failed to read active app project config:", e);
       if (firebaseConfig.projectId) {
@@ -86,14 +104,33 @@ export default function FirebaseDiagnostics() {
     //    - Log number of documents returned
     try {
       setFirestoreConnected('Loading');
-      const areasSnapshot = await getDocs(collection(db, 'areas'));
-      const docCount = areasSnapshot.size;
+      
+      console.log("Collection queried:", "areas");
+      const snapshot = await getDocs(collection(db, "areas"));
+      console.log("DIRECT TEST SIZE:", snapshot.size);
+      console.log("Snapshot size:", snapshot.size);
+      snapshot.forEach(doc => {
+        console.log("DIRECT DOC:", doc.id, doc.data());
+      });
+
+      const docCount = snapshot.size;
       setRegionsLoadedCount(docCount);
+      setDirectTestSize(docCount);
+
+      if (docCount > 0) {
+        const firstDoc = snapshot.docs[0];
+        setDirectFirstDoc({ id: firstDoc.id, ...firstDoc.data() });
+      } else {
+        setDirectFirstDoc(null);
+      }
+
       setFirestoreConnected('Yes');
       console.log("Firestore Connected successfully. Number of area documents returned:", docCount);
     } catch (error: any) {
       setFirestoreConnected('No');
       console.error("Firestore error", error);
+      setDirectTestSize(0);
+      setDirectFirstDoc({ error: error.message || String(error) });
     }
 
     // 4. Verify Storage connection:
@@ -125,12 +162,61 @@ export default function FirebaseDiagnostics() {
     console.log("--- END FIREBASE DIAGNOSTICS REPORT ---");
   };
 
+  const createTestArea = async () => {
+    try {
+      setTestWriteStatus('Writing...');
+      setTestWriteDocId('');
+      setTestQueryCount(null);
+      setTestQueryDocs([]);
+      
+      console.log("--- CREATING TEST AREA DOCUMENT ---");
+      const docRef = await addDoc(collection(db, "areas"), {
+        city: "DebugCity",
+        areaName: "DebugArea"
+      });
+      console.log("Write success. Document ID:", docRef.id);
+      setTestWriteDocId(docRef.id);
+      setTestWriteStatus('Success');
+
+      console.log("--- QUERYING AREAS COLLECTION IMMEDIATELY ---");
+      const snapshot = await getDocs(collection(db, "areas"));
+      console.log("Returned document count due to direct getDocs:", snapshot.size);
+      console.log("Snapshot size:", snapshot.size);
+      setTestQueryCount(snapshot.size);
+
+      const docsData: any[] = [];
+      snapshot.forEach(doc => {
+        console.log("Returned document data:", doc.id, doc.data());
+        docsData.push({ id: doc.id, ...doc.data() });
+      });
+      setTestQueryDocs(docsData);
+      
+      // Refresh direct test states as well
+      setDirectTestSize(snapshot.size);
+      if (snapshot.size > 0) {
+        const firstDoc = snapshot.docs[0];
+        setDirectFirstDoc({ id: firstDoc.id, ...firstDoc.data() });
+      }
+    } catch (error: any) {
+      console.error("Test write/query failed:", error);
+      setTestWriteStatus(`Failed: ${error.message || String(error)}`);
+    }
+  };
+
   useEffect(() => {
     console.log("Firebase Project ID:", firebaseConfig.projectId);
     try {
       const app = getApp();
+      console.log("Firebase app name:", app.name);
       console.log("Connected Project:", app.options.projectId);
       setCurrentProjectId(app.options.projectId || 'Unknown');
+      setCurrentAppName(app.name || 'Unknown');
+      
+      const dbDbId = (db as any)._databaseId?.database || '(default)';
+      setCurrentDatabaseId(dbDbId);
+      
+      console.log("Firestore instance details:", db);
+      console.log("Firestore db instance matches app initialization:", db.app === app);
     } catch (e: any) {
       console.error("Firebase Connected Project fetch failed on mount:", e);
       if (firebaseConfig.projectId) {
@@ -197,9 +283,23 @@ export default function FirebaseDiagnostics() {
             </div>
 
             <div className="flex items-center justify-between text-xs text-[#1A1F36] border-b border-[#F7F9FC] pb-1.5 flex-wrap gap-1">
+              <span className="text-[#697386] font-medium">Firebase App Name:</span>
+              <span id="diagnostics-current-app-name" className="font-mono font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-lg border border-gray-200 text-[10px] break-all max-w-[160px] text-right">
+                {currentAppName}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-[#1A1F36] border-b border-[#F7F9FC] pb-1.5 flex-wrap gap-1">
               <span className="text-[#697386] font-medium">Current Project ID:</span>
               <span id="diagnostics-current-project-id" className="font-mono font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-lg border border-gray-200 text-[10px] break-all max-w-[160px] text-right">
                 {currentProjectId}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-[#1A1F36] border-b border-[#F7F9FC] pb-1.5 flex-wrap gap-1">
+              <span className="text-[#697386] font-medium">Database ID:</span>
+              <span id="diagnostics-current-database-id" className="font-mono font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-lg border border-gray-200 text-[10px] break-all max-w-[160px] text-right">
+                {currentDatabaseId}
               </span>
             </div>
 
@@ -249,6 +349,49 @@ export default function FirebaseDiagnostics() {
               <pre id="diagnostics-first-doc" className="text-[9px] font-mono bg-[#F4F6F8] p-2 rounded-xl border border-[#D3DBE6] overflow-x-auto max-h-20 whitespace-pre-wrap break-all">
                 {firstDocData ? JSON.stringify(firstDocData, null, 2) : "No documents loaded / empty."}
               </pre>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-[#1A1F36] border-b border-[#F7F9FC] pb-1.5">
+              <span className="text-[#697386] font-medium">Direct Test Size:</span>
+              <span id="diagnostics-direct-test-size" className="font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-lg border border-orange-200 text-[11px]">
+                {directTestSize !== null ? directTestSize : "0"}
+              </span>
+            </div>
+
+            <div className="text-xs text-[#1A1F36] border-b border-[#F7F9FC] pb-1.5 space-y-1">
+              <span className="text-[#697386] font-medium block">Direct First Document:</span>
+              <pre id="diagnostics-direct-first-doc" className="text-[9px] font-mono bg-orange-50/50 p-2 rounded-xl border border-orange-100 overflow-x-auto max-h-20 whitespace-pre-wrap break-all text-[#1A1F36]">
+                {directFirstDoc ? JSON.stringify(directFirstDoc, null, 2) : "No documents / direct query loaded."}
+              </pre>
+            </div>
+
+            {/* Direct Write Test Controls */}
+            <div id="diagnostics-write-test-section" className="mt-3 pt-3 border-t border-[#F4F6F8] space-y-2">
+              <span className="text-[10px] font-bold text-[#4F5B66] uppercase tracking-wider block">Direct Write Test</span>
+              <button
+                id="firebase-diagnostics-create-test-btn"
+                onClick={createTestArea}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold text-[11px] py-2 rounded-xl transition-colors cursor-pointer"
+              >
+                ➕ Create Test Area
+              </button>
+              {testWriteStatus && (
+                <div id="diagnostics-write-test-results" className="space-y-1 bg-amber-50/50 p-2 rounded-xl border border-amber-100 text-[10px] font-mono text-[#1A1F36]">
+                  <div><strong className="text-[#697386]">Status:</strong> {testWriteStatus}</div>
+                  {testWriteDocId && <div><strong className="text-[#697386]">Doc ID:</strong> <span className="break-all">{testWriteDocId}</span></div>}
+                  {testQueryCount !== null && <div><strong className="text-[#697386]">New size:</strong> {testQueryCount}</div>}
+                  {testQueryDocs.length > 0 && (
+                    <div className="mt-1 pt-1 border-t border-amber-200/50 max-h-20 overflow-y-auto">
+                      <strong>Returned docs:</strong>
+                      {testQueryDocs.map((d, index) => (
+                        <div key={d.id || index} className="text-[9px] leading-tight border-b border-amber-200/20 last:border-0 pb-1 mb-1 last:pb-0 last:mb-0">
+                          {d.city} - {d.areaName} ({d.id?.substring(0, 5)}...)
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {allAreas.length > 0 && (

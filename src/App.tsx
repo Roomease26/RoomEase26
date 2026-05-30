@@ -120,7 +120,6 @@ export default function App() {
 
   // Listen to Areas
   useEffect(() => {
-    if (isInitialLoading) return;
     const unsubscribe = areaService.listenToAreas((fetchedAreas) => {
       setRawAreas(fetchedAreas);
       // Create a fresh copy of INITIAL_AREAS
@@ -134,11 +133,20 @@ export default function App() {
           mergedAreas[a.city] = [...mergedAreas[a.city], a.areaName];
         }
       });
+
+      const staticAreas = Object.values(INITIAL_AREAS).flat();
+      const firestoreAreas = fetchedAreas;
+      const finalAreas = Object.values(mergedAreas).flat();
+
+      console.log("Static areas count:", staticAreas.length);
+      console.log("Firestore areas count:", firestoreAreas.length);
+      console.log("Final merged areas count:", finalAreas.length);
+
       setAreas(mergedAreas);
       localStorage.setItem('roomease_areas', JSON.stringify(mergedAreas));
     });
     return () => unsubscribe();
-  }, [isInitialLoading]);
+  }, []);
 
   // Handle Onboarding Flow & Redirects
   useEffect(() => {
@@ -366,6 +374,30 @@ export default function App() {
     }
   };
 
+  const handleRefreshAreas = async () => {
+    try {
+      console.log('[App] Refreshing areas list automatically...');
+      const fetchedAreas = await areaService.getAllAreas();
+      setRawAreas(fetchedAreas);
+      
+      const mergedAreas: Record<City, string[]> = {} as any;
+      (Object.keys(INITIAL_AREAS) as City[]).forEach(city => {
+        mergedAreas[city] = [...INITIAL_AREAS[city]];
+      });
+
+      fetchedAreas.forEach(a => {
+        if (mergedAreas[a.city] && !mergedAreas[a.city].includes(a.areaName)) {
+          mergedAreas[a.city] = [...mergedAreas[a.city], a.areaName];
+        }
+      });
+      setAreas(mergedAreas);
+      localStorage.setItem('roomease_areas', JSON.stringify(mergedAreas));
+      console.log('[App] Areas refreshed successfully:', fetchedAreas.length);
+    } catch (err) {
+      console.error('[App] Failed to refresh areas manually:', err);
+    }
+  };
+
   const handleDeleteListing = async (listingId: string) => {
     try {
       await listingService.deleteListing(listingId);
@@ -524,6 +556,8 @@ export default function App() {
               </div>
               <OwnerDashboard 
                 areas={areas} 
+                rawAreas={rawAreas}
+                onRefreshAreas={handleRefreshAreas}
                 language={language || 'en'} 
                 onAddListing={handleAddListing} 
                 onDeleteListing={handleDeleteListing}

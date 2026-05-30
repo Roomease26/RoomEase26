@@ -8,6 +8,8 @@ import { Trash2, ExternalLink } from 'lucide-react';
 
 interface Props {
   areas: Record<City, string[]>;
+  rawAreas?: Area[];
+  onRefreshAreas?: () => void;
   language: Language;
   onAddListing: (listing: any) => void;
   onDeleteListing: (id: string) => void;
@@ -15,7 +17,16 @@ interface Props {
   listings: Listing[];
 }
 
-export default function OwnerDashboard({ areas, language, onAddListing, onDeleteListing, currentUserId, listings }: Props) {
+export default function OwnerDashboard({ 
+  areas, 
+  rawAreas = [], 
+  onRefreshAreas, 
+  language, 
+  onAddListing, 
+  onDeleteListing, 
+  currentUserId, 
+  listings 
+}: Props) {
   const [activeSubTab, setActiveSubTab] = useState<'add' | 'manage'>('add');
   const [step, setStep] = useState<1 | 2>(1);
   const [searchArea, setSearchArea] = useState('');
@@ -41,23 +52,33 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
   const [lastAddedAreaId, setLastAddedAreaId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'loading' } | null>(null);
   
-  const [cityAreas, setCityAreas] = useState<string[]>(INITIAL_AREAS[city] || []);
+  const [cityAreas, setCityAreas] = useState<string[]>([]);
 
   useEffect(() => {
-    // 2. When city changes: Immediately fetch all areas for that city again
-    // 3. Use real-time Firestore syncing (onSnapshot)
-    const unsubscribe = areaService.listenToAreasByCity(city, (fetchedAreas) => {
-      const uniqueAreas = new Set([
-        ...(INITIAL_AREAS[city] || []),
-        ...fetchedAreas.map(a => a.areaName)
-      ]);
-      const sorted = Array.from(uniqueAreas).sort((a, b) => a.localeCompare(b));
-      setCityAreas(sorted);
-      console.log('dropdown refreshed', { city, areasCount: sorted.length });
-    });
+    // 1. Log Dropdown areas prop for tracing
+    console.log("Dropdown areas:", areas);
 
-    return () => unsubscribe();
-  }, [city]);
+    // 2. Filter raw Firestore-loaded areas by selected city
+    const firestoreLoaded = (rawAreas || [])
+      .filter((a: Area) => a.city === city)
+      .map((a: Area) => a.areaName);
+
+    // 3. Clear/remove any overriding static lists and instead merge cleanly
+    const defaultCityAreas = INITIAL_AREAS[city] || [];
+    const uniqueAreas = new Set([
+      ...defaultCityAreas,
+      ...firestoreLoaded,
+      ...(areas[city] || [])
+    ]);
+
+    const sorted = Array.from(uniqueAreas).sort((a, b) => a.localeCompare(b));
+    setCityAreas(sorted);
+
+    // 4. Log Selected City, Matching Areas Count, and Matching Areas Names
+    console.log("Selected City:", city);
+    console.log("Matching Areas Count:", sorted.length);
+    console.log("Matching Areas Names:", sorted);
+  }, [areas, rawAreas, city]);
 
   useEffect(() => {
     if (cityAreas.length > 0 && (!area || !cityAreas.includes(area))) {
@@ -171,6 +192,11 @@ export default function OwnerDashboard({ areas, language, onAddListing, onDelete
       // Immediately fetch all areas again and log
       const fetchedAreas = await areaService.getAllAreas();
       console.log("Areas after refresh", fetchedAreas);
+
+      // Automatically refresh areas list in parent App component
+      if (onRefreshAreas) {
+        onRefreshAreas();
+      }
 
       // Log selected city
       const selectedCity = city;
