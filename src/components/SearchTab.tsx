@@ -34,8 +34,19 @@ export default function SearchTab({ listings, user, areas, isCityPaid, language,
     return matchesQuery && matchesCity && matchesArea;
   });
 
+  console.log("AREAS ARRAY:", areas);
+  console.log("AREAS LENGTH:", (areas as any)?.length);
+
+  if ((areas as any)?.length > 0) {
+    console.log("FIRST AREA:", (areas as any)[0]);
+  }
+
   return (
     <div className="min-h-screen bg-[#F7F9FC] p-6 pb-24">
+      <div>
+        <h3>DEBUG AREAS</h3>
+        <pre>{JSON.stringify(areas, null, 2)}</pre>
+      </div>
       <div className="max-w-md mx-auto">
         <header className="mb-6">
           <div className="sleek-tag mb-2 inline-block">{t.search}</div>

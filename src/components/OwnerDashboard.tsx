@@ -320,8 +320,19 @@ export default function OwnerDashboard({
     return null; // Handle via popup now
   }
 
+  console.log("AREAS ARRAY:", areas);
+  console.log("AREAS LENGTH:", (areas as any)?.length);
+
+  if ((areas as any)?.length > 0) {
+    console.log("FIRST AREA:", (areas as any)[0]);
+  }
+
   return (
     <div className="min-h-screen bg-[#F7F9FC] pb-24">
+      <div>
+        <h3>DEBUG AREAS</h3>
+        <pre>{JSON.stringify(areas, null, 2)}</pre>
+      </div>
       <div className="max-w-md mx-auto p-6">
         {toast && (
           <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-2xl shadow-xl text-white font-bold text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-300 ${
