@@ -6,7 +6,11 @@ import { db } from '../lib/firebase';
 import { areaService } from '../services/dataService';
 import { Area } from '../types';
 
-export default function FirebaseDiagnostics() {
+interface FirebaseDiagnosticsProps {
+  diagnosticsAreas?: Area[];
+}
+
+export default function FirebaseDiagnostics({ diagnosticsAreas = [] }: FirebaseDiagnosticsProps) {
   const [firebaseConnected, setFirebaseConnected] = useState<'Yes' | 'No' | 'Loading'>('Loading');
   const [firestoreConnected, setFirestoreConnected] = useState<'Yes' | 'No' | 'Loading'>('Loading');
   const [storageConnected, setStorageConnected] = useState<'Yes' | 'No' | 'Loading'>('Loading');
@@ -227,14 +231,15 @@ export default function FirebaseDiagnostics() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = areaService.listenToAreas((fetched) => {
-      setAllAreas(fetched);
-      setSnapshotSize(fetched.length);
-      setTotalFetchedCount(fetched.length);
-      setFirstDocData(fetched.length > 0 ? fetched[0] : null);
-    });
-    return () => unsubscribe();
-  }, []);
+    setAllAreas(diagnosticsAreas);
+    setSnapshotSize(diagnosticsAreas.length);
+    setTotalFetchedCount(diagnosticsAreas.length);
+    setFirstDocData(diagnosticsAreas.length > 0 ? diagnosticsAreas[0] : null);
+  }, [diagnosticsAreas]);
+
+  const areas = diagnosticsAreas;
+  console.log("DIAGNOSTICS AREAS:", diagnosticsAreas.length);
+  console.log("UI AREAS:", areas.length);
 
   // Only render on development environment
   if (!import.meta.env.DEV) {

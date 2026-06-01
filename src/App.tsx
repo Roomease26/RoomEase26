@@ -776,7 +776,7 @@ export default function App() {
             )}
           </>
         )}
-        <FirebaseDiagnostics />
+        <FirebaseDiagnostics diagnosticsAreas={rawAreas} />
       </div>
     </ErrorBoundary>
   );
